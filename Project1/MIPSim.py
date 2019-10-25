@@ -4,19 +4,36 @@
 # @File    : MIPSim.py
 # @Software: PyCharm
 
+# On my honor, I have neither given nor received unauthorized aid on this assignment.
+
 START_ADDRESS = 256  # 起始地址
 INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
-memory_space = {}  # 模拟存储器（存放data）
+MEMORY_SPACE = {}  # 模拟存储器（存放data）
+
+
+def twos_complement_to_value(input_str):  # 二进制补码转整数真值
+    unsigned_str = input_str[1:]
+    if input_str[0] == '1' :
+        for i in range(31):  # 将负数补码的无符号部分按位取反
+            if unsigned_str[i] == '0':
+                unsigned_str = unsigned_str[:i] + '1' + unsigned_str[i + 1:]
+            else:
+                unsigned_str = unsigned_str[:i] + '0' + unsigned_str[i + 1:]
+        abs_value = int(unsigned_str, 2) + 1
+        value = abs_value if input_str[0] == '0' else abs_value * (-1)
+    else:
+        value = int(unsigned_str, 2)
+    return value
 
 
 def disassembler_instruction(input_file_name, output_file_name, start_address):  # 反汇编器（第一部分），将机器码还原为指令序列， 并写入文件disassembly.txt
     instruction_count = 0
     instruction_sequence = {}
     current_address = start_address
-    input_file = open(input_file_name)
-    output_file = open(output_file_name, 'w')
-    input_line = input_file.readline()
+    input_file_pointer = open(input_file_name)
+    output_file_pointer = open(output_file_name, 'w')
+    input_line = input_file_pointer.readline()
     while input_line:  # 指令段到BREAK结束
         # print(input_line[0:32], end='\t')
         if input_line[0:2] == '01':  # Category-1
@@ -129,20 +146,37 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
                               + 'R' + str(int(input_line[6:11], 2)) + ", " \
                               + '#' + str(int(input_line[16:32], 2))
         print(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction)
-        output_file.write(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction + '\n')
+        output_file_pointer.write(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction + '\n')
         instruction_count = instruction_count + 1
         instruction_sequence[current_address] = instruction
         current_address = current_address + 4
         if instruction == 'BREAK':
             break
-        input_line = input_file.readline()
-    output_file.close()
+        input_line = input_file_pointer.readline()
+    output_file_pointer.close()
+    input_file_pointer.close()
     return instruction_count, instruction_sequence
 
 
-def disassembler_memory(input_file_name, start_address):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
-    pass
+def disassembler_memory(input_file_name, output_file_name, start_address):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
+    memory_space = {}
+    input_file_pointer = open(input_file_name)
+    output_file_pointer = open(output_file_name, 'a')
+    current_address = start_address
+    input_lines = input_file_pointer.readlines()[21:]
+    for line in input_lines:
+        line_value = twos_complement_to_value(line)
+        print(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value))
+        output_file_pointer.write(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value) + '\n')
+        memory_space[current_address] = line_value
+        current_address = current_address + 4
 
+    output_file_pointer.close()
+    input_file_pointer.close()
+    return memory_space
+    
+INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
+MEMORY_SPACE = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
 
-INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt',START_ADDRESS)
-
+print(INSTRUCTION_SEQUENCE)
+print(MEMORY_SPACE)

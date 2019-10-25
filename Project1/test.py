@@ -4,19 +4,18 @@
 # @File    : test.py
 # @Software: PyCharm
 
+def twos_complement_to_value(input_str):
+    unsigned_str = input_str[1:]
+    for i in range(31):  # 无符号部分按位取反
+        if unsigned_str[i] == '0':
+            unsigned_str = unsigned_str[:i] + '1' + unsigned_str[i + 1:]
+        else:
+            unsigned_str = unsigned_str[:i] + '0' + unsigned_str[i + 1:]
+    abs_value = int(unsigned_str, 2) + 1
+    value = abs_value if input_str[0] == '0' else abs_value * (-1)
 
-START_ADDRESS = 256  # 起始地址
-instruction_sequence = {}  # 指令序列
-memory_space = {}  # 模拟存储器（存放data）
-
-
-def disassembler(input_file_name):  # 反汇编器，将机器码还原为指令序列，并写入存储器内容
-    input_file = open(input_file_name)
-    input_line = input_file.readline()
-    while input_line != '':  # 指令段到BREAK结束
-        print(input_line[0:32])
-
-        input_line = input_file.readline()
+    print(value)
 
 
-disassembler('sample.txt')
+
+twos_complement_to_value('11111111111111111111111111111111')
