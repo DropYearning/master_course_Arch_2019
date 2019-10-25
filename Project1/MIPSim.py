@@ -9,12 +9,12 @@
 START_ADDRESS = 256  # 起始地址
 INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
-MEMORY_SPACE = {}  # 模拟存储器（存放data）
 
 MIPS_STATUS = {
-    'PC': START_ADDRESS,
-    'Registers': [0]*32,
-    'Data': MEMORY_SPACE,
+    'PC': START_ADDRESS,  # 程序计数器
+    'Registers': [0]*32,  # 32个MIPS寄存器
+    'Data': {},  # 模拟的存储器空间
+
 }
 
 
@@ -151,7 +151,7 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
                 instruction = 'XORI ' + 'R' + str(int(input_line[11:16], 2)) + ', ' \
                               + 'R' + str(int(input_line[6:11], 2)) + ", " \
                               + '#' + str(int(input_line[16:32], 2))
-        print(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction)
+        # print(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction)
         output_file_pointer.write(input_line[0:32] + '\t' + str(current_address) + '\t' + instruction + '\n')
         instruction_count = instruction_count + 1
         instruction_sequence[current_address] = instruction
@@ -172,7 +172,7 @@ def disassembler_memory(input_file_name, output_file_name, start_address):  # �
     input_lines = input_file_pointer.readlines()[21:]
     for line in input_lines:
         line_value = twos_complement_to_value(line)
-        print(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value))
+        # print(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value))
         output_file_pointer.write(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value) + '\n')
         memory_space[current_address] = line_value
         current_address = current_address + 4
@@ -182,26 +182,36 @@ def disassembler_memory(input_file_name, output_file_name, start_address):  # �
     return memory_space
 
 
-def print_status(mips_status):
+def print_status(mips_status):  # 输出Registers和Data状态
     print("Registers")
     for i in range(32):
         if i % 8 == 0:
             if i < 9:
-                print('R0' + str(i) + '\t' + str(mips_status['Registers'][i]), end='\t')
+                print('R0' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
             else:
-                print('R' + str(i) + '\t' + str(mips_status['Registers'][i]), end='\t')
+                print('R' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
         elif i % 8 == 7:
             print(str(mips_status['Registers'][i]))
         else:
             print(str(mips_status['Registers'][i]), end='\t')
+    print("")
+    print("Data")
+    word_number = len(mips_status['Data']) #24
+    data_start_address = list(mips_status['Data'])[0]
+    for i in range(word_number):
+        current_address = data_start_address + i * 4
+        if i % 8 == 0:
+            print(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]), end='\t')
+        elif i % 8 == 7:
+            print(str(mips_status['Data'][current_address]))
+        else:
+            print(str(mips_status['Data'][current_address]), end='\t')
+    print('')
+    print('--------------------')
 
-
-
-    
 INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
-MEMORY_SPACE = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
+MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
 
-print(INSTRUCTION_SEQUENCE)
-print(MEMORY_SPACE)
+
 
 print_status(MIPS_STATUS)
