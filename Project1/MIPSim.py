@@ -11,6 +11,12 @@ INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
 MEMORY_SPACE = {}  # 模拟存储器（存放data）
 
+MIPS_STATUS = {
+    'PC': START_ADDRESS,
+    'Registers': [0]*32,
+    'Data': MEMORY_SPACE,
+}
+
 
 def twos_complement_to_value(input_str):  # 二进制补码转整数真值
     unsigned_str = input_str[1:]
@@ -174,9 +180,28 @@ def disassembler_memory(input_file_name, output_file_name, start_address):  # �
     output_file_pointer.close()
     input_file_pointer.close()
     return memory_space
+
+
+def print_status(mips_status):
+    print("Registers")
+    for i in range(32):
+        if i % 8 == 0:
+            if i < 9:
+                print('R0' + str(i) + '\t' + str(mips_status['Registers'][i]), end='\t')
+            else:
+                print('R' + str(i) + '\t' + str(mips_status['Registers'][i]), end='\t')
+        elif i % 8 == 7:
+            print(str(mips_status['Registers'][i]))
+        else:
+            print(str(mips_status['Registers'][i]), end='\t')
+
+
+
     
 INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
 MEMORY_SPACE = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
 
 print(INSTRUCTION_SEQUENCE)
 print(MEMORY_SPACE)
+
+print_status(MIPS_STATUS)
