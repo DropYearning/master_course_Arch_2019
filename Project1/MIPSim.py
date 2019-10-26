@@ -15,7 +15,7 @@ MIPS_STATUS = {
     'CycleNumber': 0,  # 当前执行指令的周期数
     'PC': START_ADDRESS - 4,  # 程序计数器(当前指令)
     'NPC': START_ADDRESS,  # 程序计数器（下一条指令）
-    'Registers': [0]*32,  # 32个MIPS寄存器
+    'Registers': [0] * 32,  # 32个MIPS寄存器
     'Data': {},  # 模拟的存储器空间
     'END': False,  # 标志程序是否运行结束
 }
@@ -60,7 +60,7 @@ def value_to_twos_complement(value):  # 整数真值转换为二进制补码，�
                     binary_value_str = binary_value_str[:i] + '1' + binary_value_str[i + 1:]
                 else:
                     binary_value_str = binary_value_str[:i] + '0' + binary_value_str[i + 1:]
-        for i in range(last_zero_index + 1, MACHINE_WORD_LENGTH-1):
+        for i in range(last_zero_index + 1, MACHINE_WORD_LENGTH - 1):
             binary_value_str = binary_value_str[:i] + '0' + binary_value_str[i + 1:]
         binary_value_str = '1' + binary_value_str
     else:  # 正数
@@ -94,7 +94,8 @@ def shift(mode, shamt, input_value):  # 移位函数
         return twos_complement_to_value(binary_str)
 
 
-def disassembler_instruction(input_file_name, output_file_name, start_address):  # 反汇编器（第一部分），将机器码还原为指令序列， 并写入文件disassembly.txt
+def disassembler_instruction(input_file_name, output_file_name,
+                             start_address):  # 反汇编器（第一部分），将机器码还原为指令序列， 并写入文件disassembly.txt
     instruction_count = 0
     instruction_sequence = {}
     current_address = start_address
@@ -105,7 +106,7 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
         # print(input_line[0:32], end='\t')
         if input_line[0:2] == '01':  # Category-1
             if input_line[2:6] == '0000':  # J target
-                instruction = 'J #' + str(int(input_line[6:32]+'00', 2))
+                instruction = 'J #' + str(int(input_line[6:32] + '00', 2))
 
             elif input_line[2:6] == '0001':  # JR rs
                 instruction = 'JR ' + 'R' + str(int(input_line[6:11], 2))
@@ -150,9 +151,9 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
                               + str(decimal_offset) + "(R" + str(int(input_line[6:11], 2)) + ')'
 
             elif input_line[2:6] == '0111':  # LW rt, offset(base)
-                if input_line[16] == '0': # 符号位为0，offset为正
+                if input_line[16] == '0':  # 符号位为0，offset为正
                     decimal_offset = int(input_line[16:32], 2)
-                elif input_line[16] == '1': # 符号位为1，offset为负
+                elif input_line[16] == '1':  # 符号位为1，offset为负
                     decimal_offset = twos_complement_to_value(input_line[16:32])
                 instruction = 'LW ' + 'R' + str(int(input_line[11:16], 2)) + ", " \
                               + str(decimal_offset) + "(R" + str(int(input_line[6:11], 2)) + ')'
@@ -172,7 +173,7 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
                               + 'R' + str(int(input_line[11:16], 2)) + ", " \
                               + '#' + str(int(input_line[21:26], 2))
 
-            elif input_line[2:6] == '1011':   # NOP（No Operation）
+            elif input_line[2:6] == '1011':  # NOP（No Operation）
                 instruction = 'NOP'
 
         elif input_line[0:2] == '11':  # Category-2
@@ -217,7 +218,8 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
                               + 'R' + str(int(input_line[11:16], 2))
 
             elif input_line[2:6] == '1000':  # ADDI rt, rs, immediate
-                decimal_imm = int(input_line[16:32], 2) if input_line[16] == '0' else twos_complement_to_value(input_line[16:32])
+                decimal_imm = int(input_line[16:32], 2) if input_line[16] == '0' else twos_complement_to_value(
+                    input_line[16:32])
                 instruction = 'ADDI ' + 'R' + str(int(input_line[11:16], 2)) + ', ' \
                               + 'R' + str(int(input_line[6:11], 2)) + ", " \
                               + '#' + str(decimal_imm)
@@ -256,7 +258,8 @@ def disassembler_instruction(input_file_name, output_file_name, start_address): 
     return instruction_count, instruction_sequence
 
 
-def disassembler_memory(input_file_name, output_file_name, start_address):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
+def disassembler_memory(input_file_name, output_file_name,
+                        start_address):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
     memory_space = {}
     input_file_pointer = open(input_file_name)
     output_file_pointer = open(output_file_name, 'a')
@@ -392,7 +395,8 @@ def instruction_operation(instruction, old_status):
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-        temp_status['Registers'][rd_index] = 1 if temp_status['Registers'][rs_index] < temp_status['Registers'][rt_index] else 0
+        temp_status['Registers'][rd_index] = 1 if temp_status['Registers'][rs_index] < temp_status['Registers'][
+            rt_index] else 0
 
     elif op == 'ADDI':  # ADDI rt, rs, immediate [rt ← rs + immediate]
         rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
@@ -425,7 +429,9 @@ def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状�
     output_file_pointer = open(output_file_name, 'a')
     output_file_pointer.write("--------------------" + '\n')
     # print('--------------------')
-    output_file_pointer.write("Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[mips_status['PC']] + '\n')
+    output_file_pointer.write(
+        "Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[
+            mips_status['PC']] + '\n')
     # print("Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[mips_status['PC']])
     output_file_pointer.write('\n')
     # print('')
@@ -454,7 +460,8 @@ def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状�
     for i in range(word_number):
         current_address = data_start_address + i * 4
         if i % 8 == 0:
-            output_file_pointer.write(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]) + '\t')
+            output_file_pointer.write(
+                str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]) + '\t')
             # print(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]), end='\t')
         elif i % 8 == 7:
             output_file_pointer.write(str(mips_status['Data'][current_address]) + '\n')
@@ -469,7 +476,7 @@ def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状�
 
 def run():  # 运行模拟器，输出每一个周期的状态结果
     output_file_pointer = open('simulation.txt', 'w')
-    output_file_pointer.truncate() # 清空文件simulation.txt
+    output_file_pointer.truncate()  # 清空文件simulation.txt
     output_file_pointer.close()
     global MIPS_STATUS
     while MIPS_STATUS['END'] != True:
@@ -483,5 +490,3 @@ if __name__ == '__main__':
     print(INSTRUCTION_SEQUENCE)
     print("\t")
     run()
-
-
