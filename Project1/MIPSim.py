@@ -315,8 +315,10 @@ def instruction_operation(instruction, old_status):
 
     elif op == 'SRL':  # SRL rd, rt, sa 【rd ← rt >> sa】
         pass
+
     elif op == 'SRA':  # SRA rd, rt, sa 【rd ← rt >> sa (arithmetic)】
         pass
+
     elif op == 'NOP':
         pass  # no operation
 
@@ -362,8 +364,11 @@ def instruction_operation(instruction, old_status):
         rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rd_index] = ~ (temp_status['Registers'][rs_index] | temp_status['Registers'][rt_index])
 
-    elif op == 'SLT':  # SLT rd, rs, rt
-        pass
+    elif op == 'SLT':  # SLT rd, rs, rt [rd ← (rs < rt)]
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = 1 if temp_status['Registers'][rs_index] < temp_status['Registers'][rt_index] else 0
 
     elif op == 'ADDI':  # ADDI rt, rs, immediate [rt ← rs + immediate]
         rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
@@ -371,12 +376,23 @@ def instruction_operation(instruction, old_status):
         imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] + imm
 
-    elif op == 'ANDI':
-        pass
-    elif op == 'ORI':
-        pass
-    elif op == 'XORI':
-        pass
+    elif op == 'ANDI':  # ANDI rt, rs, immediate [rt ← rs AND immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] & imm
+
+    elif op == 'ORI':  # ORI rt, rs, immediate [rt ← rs OR immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] | imm
+
+    elif op == 'XORI':  # XORI rt, rs, immediate [rt ← rs OR immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] ^ imm
 
     return temp_status
 
