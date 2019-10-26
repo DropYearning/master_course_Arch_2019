@@ -9,7 +9,7 @@
 START_ADDRESS = 256  # 起始地址
 INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
-MACHINE_WORD_LENGTH = 32 # 机器字长
+MACHINE_WORD_LENGTH = 32  # 机器字长
 
 MIPS_STATUS = {
     'CycleNumber': 0,  # 当前执行指令的周期数
@@ -268,7 +268,6 @@ def disassembler_memory(input_file_name, output_file_name, start_address):  # �
         output_file_pointer.write(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value) + '\n')
         memory_space[current_address] = line_value
         current_address = current_address + 4
-
     output_file_pointer.close()
     input_file_pointer.close()
     return memory_space
@@ -406,7 +405,6 @@ def instruction_operation(instruction, old_status):
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] & imm
-        # TODO
 
     elif op == 'ORI':  # ORI rt, rs, immediate [rt ← rs OR immediate]
         rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
@@ -474,9 +472,6 @@ def run():  # 运行模拟器，输出每一个周期的状态结果
     output_file_pointer.truncate() # 清空文件simulation.txt
     output_file_pointer.close()
     global MIPS_STATUS
-    # for inst in INSTRUCTION_SEQUENCE.values():
-    #     MIPS_STATUS = instruction_operation(inst, MIPS_STATUS)
-    #     print_status(MIPS_STATUS, 'simulation.txt')
     while MIPS_STATUS['END'] != True:
         MIPS_STATUS = instruction_operation(INSTRUCTION_SEQUENCE[MIPS_STATUS['NPC']], MIPS_STATUS)
         print_status(MIPS_STATUS, 'simulation.txt')
