@@ -17,6 +17,7 @@ MIPS_STATUS = {
     'NPC': START_ADDRESS,  # 程序计数器（下一条指令）
     'Registers': [0]*32,  # 32个MIPS寄存器
     'Data': {},  # 模拟的存储器空间
+    'END': False,  # 标志程序是否运行结束
 }
 
 
@@ -35,14 +36,62 @@ def twos_complement_to_value(input_str):  # 二进制补码转整数真值
     return value
 
 
-def value_to_twos_complement(value): #  整数真值转换为二进制补码
+def value_to_twos_complement(value):  # 整数真值转换为二进制补码，要求输入的真值在32位补码可表示的范围内
     global MACHINE_WORD_LENGTH
-    value_str = str(value)
+    if str(value)[0] == '-':  # 负数
+        abs_value = value * -1
+        binary_value_str = str(bin(abs_value))[2:]
+        if len(binary_value_str) < MACHINE_WORD_LENGTH - 1:
+            for i in range(MACHINE_WORD_LENGTH - 1 - len(binary_value_str)):
+                binary_value_str = '0' + binary_value_str
+        elif len(binary_value_str) == MACHINE_WORD_LENGTH:  # 解决2147483648转为二进制的问题
+            binary_value_str = binary_value_str[1:]
+        for i in range(MACHINE_WORD_LENGTH - 1):  # 按位取反
+            if binary_value_str[i] == '0':
+                binary_value_str = binary_value_str[:i] + '1' + binary_value_str[i + 1:]
+            else:
+                binary_value_str = binary_value_str[:i] + '0' + binary_value_str[i + 1:]
+        last_zero_index = binary_value_str.rfind('0')  # 加一
+        if last_zero_index != -1:
+            binary_value_str = binary_value_str[:last_zero_index] + '1' + binary_value_str[last_zero_index + 1:]
+        else:  # 解决2147483648转为二进制的问题
+            for i in range(MACHINE_WORD_LENGTH - 1):  # 按位取反
+                if binary_value_str[i] == '0':
+                    binary_value_str = binary_value_str[:i] + '1' + binary_value_str[i + 1:]
+                else:
+                    binary_value_str = binary_value_str[:i] + '0' + binary_value_str[i + 1:]
+        for i in range(last_zero_index + 1, MACHINE_WORD_LENGTH-1):
+            binary_value_str = binary_value_str[:i] + '0' + binary_value_str[i + 1:]
+        binary_value_str = '1' + binary_value_str
+    else:  # 正数
+        binary_value_str = str(bin(value))[2:]
+        if len(binary_value_str) < MACHINE_WORD_LENGTH - 1:
+            for i in range(MACHINE_WORD_LENGTH - 1 - len(binary_value_str)):
+                binary_value_str = '0' + binary_value_str
+        binary_value_str = '0' + binary_value_str
+    return binary_value_str
 
 
-def shift(mode, shamt, input_value ): #  移位函数（）
-    if(mode == 1):  #
-        pass
+def shift(mode, shamt, input_value):  # 移位函数
+    binary_str = value_to_twos_complement(input_value)
+    if mode == 'SLL':  # 逻辑左移
+        binary_str = binary_str[shamt:]
+        for i in range(shamt):
+            binary_str = binary_str + '0'
+        return twos_complement_to_value(binary_str)
+
+    elif mode == 'SRL':  # 逻辑右移
+        binary_str = binary_str[:-shamt]
+        for i in range(shamt):
+            binary_str = '0' + binary_str
+        return twos_complement_to_value(binary_str)
+
+    elif mode == 'SRA':  # 算术右移
+        sign = binary_str[0]
+        binary_str = binary_str[:-shamt]
+        for i in range(shamt):
+            binary_str = sign + binary_str
+        return twos_complement_to_value(binary_str)
 
 
 def disassembler_instruction(input_file_name, output_file_name, start_address):  # 反汇编器（第一部分），将机器码还原为指令序列， 并写入文件disassembly.txt
@@ -225,36 +274,6 @@ def disassembler_memory(input_file_name, output_file_name, start_address):  # �
     return memory_space
 
 
-def print_status(mips_status):  # 输出某一个Cycle的状态
-    print('--------------------')
-    print("Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[mips_status['PC']])
-    print("Registers")
-    for i in range(32):
-        if i % 8 == 0:
-            if i < 9:
-                print('R0' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
-            else:
-                print('R' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
-        elif i % 8 == 7:
-            print(str(mips_status['Registers'][i]))
-        else:
-            print(str(mips_status['Registers'][i]), end='\t')
-    print("")
-    print("Data")
-    word_number = len(mips_status['Data'])  # 存储器中的字数
-    data_start_address = list(mips_status['Data'])[0]
-    for i in range(word_number):
-        current_address = data_start_address + i * 4
-        if i % 8 == 0:
-            print(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]), end='\t')
-        elif i % 8 == 7:
-            print(str(mips_status['Data'][current_address]))
-        else:
-            print(str(mips_status['Data'][current_address]), end='\t')
-    print('')
-    print('--------------------')
-
-
 def instruction_operation(instruction, old_status):
     temp_status = old_status
     temp_status['CycleNumber'] = temp_status['CycleNumber'] + 1
@@ -263,7 +282,7 @@ def instruction_operation(instruction, old_status):
     op = instruction.split(' ')[0]
     if op == 'J':  # J target
         target = instruction[3:]
-        temp_status['NPC'] = target
+        temp_status['NPC'] = int(target)
 
     elif op == 'JR':  # JR rs [PC ← rs]
         rs_index = int(instruction[3:])
@@ -289,7 +308,7 @@ def instruction_operation(instruction, old_status):
             temp_status['NPC'] = temp_status['NPC'] + offset
 
     elif op == 'BREAK':
-        pass  # no operation
+        temp_status['END'] = True  # 程序结束
 
     elif op == 'SW':  # SW rt, offset(base) [memory[base+offset] ← rt]
         rt_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
@@ -311,13 +330,19 @@ def instruction_operation(instruction, old_status):
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-        pass
+        temp_status['Registers'][rd_index] = shift('SLL', sa, temp_status['Registers'][rt_index])
 
     elif op == 'SRL':  # SRL rd, rt, sa 【rd ← rt >> sa】
-        pass
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = shift('SRL', sa, temp_status['Registers'][rt_index])
 
     elif op == 'SRA':  # SRA rd, rt, sa 【rd ← rt >> sa (arithmetic)】
-        pass
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = shift('SRA', sa, temp_status['Registers'][rt_index])
 
     elif op == 'NOP':
         pass  # no operation
@@ -381,6 +406,7 @@ def instruction_operation(instruction, old_status):
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rt_index] = temp_status['Registers'][rs_index] & imm
+        # TODO
 
     elif op == 'ORI':  # ORI rt, rs, immediate [rt ← rs OR immediate]
         rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
@@ -397,20 +423,70 @@ def instruction_operation(instruction, old_status):
     return temp_status
 
 
-def run():
+def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状态
+    output_file_pointer = open(output_file_name, 'a')
+    output_file_pointer.write("--------------------" + '\n')
+    # print('--------------------')
+    output_file_pointer.write("Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[mips_status['PC']] + '\n')
+    # print("Cycle:" + str(mips_status['CycleNumber']) + '\t' + str(mips_status['PC']) + '\t' + INSTRUCTION_SEQUENCE[mips_status['PC']])
+    output_file_pointer.write('\n')
+    # print('')
+    output_file_pointer.write("Registers" + '\n')
+    # print("Registers")
+    for i in range(32):
+        if i % 8 == 0:
+            if i < 9:
+                output_file_pointer.write('R0' + str(i) + ':\t' + str(mips_status['Registers'][i]) + '\t')
+                # print('R0' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
+            else:
+                output_file_pointer.write('R' + str(i) + ':\t' + str(mips_status['Registers'][i]) + '\t')
+                # print('R' + str(i) + ':\t' + str(mips_status['Registers'][i]), end='\t')
+        elif i % 8 == 7:
+            output_file_pointer.write(str(mips_status['Registers'][i]) + '\n')
+            # print(str(mips_status['Registers'][i]))
+        else:
+            output_file_pointer.write(str(mips_status['Registers'][i]) + '\t')
+            # print(str(mips_status['Registers'][i]), end='\t')
+    # print("")
+    output_file_pointer.write('\n')
+    # print("Data")
+    output_file_pointer.write("Data" + '\n')
+    word_number = len(mips_status['Data'])  # 存储器中的字数
+    data_start_address = list(mips_status['Data'])[0]
+    for i in range(word_number):
+        current_address = data_start_address + i * 4
+        if i % 8 == 0:
+            output_file_pointer.write(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]) + '\t')
+            # print(str(current_address) + ":" + '\t' + str(mips_status['Data'][current_address]), end='\t')
+        elif i % 8 == 7:
+            output_file_pointer.write(str(mips_status['Data'][current_address]) + '\n')
+            # print(str(mips_status['Data'][current_address]))
+        else:
+            output_file_pointer.write(str(mips_status['Data'][current_address]) + '\t')
+            # print(str(mips_status['Data'][current_address]), end='\t')
+    # print('')
+    output_file_pointer.write('\n')
+    output_file_pointer.close()
+
+
+def run():  # 运行模拟器，输出每一个周期的状态结果
+    output_file_pointer = open('simulation.txt', 'w')
+    output_file_pointer.truncate() # 清空文件simulation.txt
+    output_file_pointer.close()
     global MIPS_STATUS
-    for inst in INSTRUCTION_SEQUENCE.values():
-        MIPS_STATUS = instruction_operation(inst, MIPS_STATUS)
-        print_status(MIPS_STATUS)
+    # for inst in INSTRUCTION_SEQUENCE.values():
+    #     MIPS_STATUS = instruction_operation(inst, MIPS_STATUS)
+    #     print_status(MIPS_STATUS, 'simulation.txt')
+    while MIPS_STATUS['END'] != True:
+        MIPS_STATUS = instruction_operation(INSTRUCTION_SEQUENCE[MIPS_STATUS['NPC']], MIPS_STATUS)
+        print_status(MIPS_STATUS, 'simulation.txt')
 
 
 if __name__ == '__main__':
     INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
     MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
     print(INSTRUCTION_SEQUENCE)
-    print(MIPS_STATUS['Registers'])
-    print(MIPS_STATUS['Data'])
     print("\t")
-    # run()
+    run()
 
 
