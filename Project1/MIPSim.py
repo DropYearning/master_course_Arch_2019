@@ -9,6 +9,7 @@
 START_ADDRESS = 256  # 起始地址
 INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
+MACHINE_WORD_LENGTH = 32 # 机器字长
 
 MIPS_STATUS = {
     'CycleNumber': 0,  # 当前执行指令的周期数
@@ -21,7 +22,7 @@ MIPS_STATUS = {
 
 def twos_complement_to_value(input_str):  # 二进制补码转整数真值
     unsigned_str = input_str[1:]
-    if input_str[0] == '1' :
+    if input_str[0] == '1':
         for i in range(31):  # 将负数补码的无符号部分按位取反
             if unsigned_str[i] == '0':
                 unsigned_str = unsigned_str[:i] + '1' + unsigned_str[i + 1:]
@@ -32,6 +33,16 @@ def twos_complement_to_value(input_str):  # 二进制补码转整数真值
     else:
         value = int(unsigned_str, 2)
     return value
+
+
+def value_to_twos_complement(value): #  整数真值转换为二进制补码
+    global MACHINE_WORD_LENGTH
+    value_str = str(value)
+
+
+def shift(mode, shamt, input_value ): #  移位函数（）
+    if(mode == 1):  #
+        pass
 
 
 def disassembler_instruction(input_file_name, output_file_name, start_address):  # 反汇编器（第一部分），将机器码还原为指令序列， 并写入文件disassembly.txt
@@ -263,19 +274,19 @@ def instruction_operation(instruction, old_status):
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         if temp_status['Registers'][rs_index] == temp_status['Registers'][rt_index]:
-            temp_status['NPC'] = temp_status['NPC'] + offset  # TODO BEQ跳转
+            temp_status['NPC'] = temp_status['NPC'] + offset
 
     elif op == 'BLTZ':  # BLTZ rs, offset [if rs < 0 then branch]
         rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         if temp_status['Registers'][rs_index] < 0:
-            temp_status['NPC'] = temp_status['NPC'] + offset  # TODO BLTZ跳转
+            temp_status['NPC'] = temp_status['NPC'] + offset
 
     elif op == 'BGTZ':  # BGTZ rs, offset [if rs > 0 then branch]
         rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         if temp_status['Registers'][rs_index] > 0:
-            temp_status['NPC'] = temp_status['NPC'] + offset  # TODO BGTZ跳转
+            temp_status['NPC'] = temp_status['NPC'] + offset
 
     elif op == 'BREAK':
         pass  # no operation
@@ -300,12 +311,11 @@ def instruction_operation(instruction, old_status):
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-
-
         pass
-    elif op == 'SRL':
+
+    elif op == 'SRL':  # SRL rd, rt, sa 【rd ← rt >> sa】
         pass
-    elif op == 'SRA':
+    elif op == 'SRA':  # SRA rd, rt, sa 【rd ← rt >> sa (arithmetic)】
         pass
     elif op == 'NOP':
         pass  # no operation
@@ -328,16 +338,33 @@ def instruction_operation(instruction, old_status):
         rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] * temp_status['Registers'][rt_index]
 
-    elif op == 'AND':
+    elif op == 'AND':  # AND rd, rs, rt[rd ← rs AND rt]（按位与）
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] & temp_status['Registers'][rt_index]
+
+    elif op == 'OR':  # OR rd, rs, rt[rd ← rs OR rt] （按位或）
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] | temp_status['Registers'][rt_index]
+
+    elif op == 'XOR':  # XOR rd, rs, rt[rd ← rs XOR rt] (按位异或)
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] ^ temp_status['Registers'][rt_index]
+
+    elif op == 'NOR':  # NOR rd, rs, rt[rd ← rs NOR rt] (按位或非)
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        temp_status['Registers'][rd_index] = ~ (temp_status['Registers'][rs_index] | temp_status['Registers'][rt_index])
+
+    elif op == 'SLT':  # SLT rd, rs, rt
         pass
-    elif op == 'OR':
-        pass
-    elif op == 'XOR':
-        pass
-    elif op == 'NOR':
-        pass
-    elif op == 'SLT':
-        pass
+
     elif op == 'ADDI':  # ADDI rt, rs, immediate [rt ← rs + immediate]
         rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
