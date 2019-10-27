@@ -479,7 +479,7 @@ def run():  # 运行模拟器，输出每一个周期的状态结果
     output_file_pointer.truncate()  # 清空文件simulation.txt
     output_file_pointer.close()
     global MIPS_STATUS
-    while not MIPS_STATUS['END']:
+    while MIPS_STATUS['END'] != True:
         MIPS_STATUS = instruction_operation(INSTRUCTION_SEQUENCE[MIPS_STATUS['NPC']], MIPS_STATUS)
         print_status(MIPS_STATUS, 'simulation.txt')
 
