@@ -3,4 +3,4 @@
 teacher : CMS
 
 ## project1
-    简单32位MIPS反汇编器和模拟器的实现
+简单32位MIPS反汇编器和模拟器的实现
