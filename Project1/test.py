@@ -97,7 +97,7 @@ comma_index = int(instruction[3:].replace(" ", "").index(','))
 left_parenthesis_index = int(instruction[3:].replace(" ", "").index('('))
 offset = int(instruction[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
 base = int(instruction[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
-print(op,rt_index, offset, base)
+# print(op,rt_index, offset, base)
 
 
 def shift(mode, shamt, input_value):  # 移位函数
@@ -122,6 +122,6 @@ def shift(mode, shamt, input_value):  # 移位函数
         return twos_complement_to_value(binary_str)
 
 
-print(value_to_twos_complement(0))
-print(value_to_twos_complement(1))
-print(0 & 1)
+mips_status={}
+mips_status['Data'] = {384: 0, 388: -1, 392: 1, 396: -1, 400: 0, 404: 0, 408: 0, 412: 0, 416: 0, 420: 0, 424: 0, 428: 0, 432: 0, 340: -1, 344: -2, 348: -3, 352: 1, 356: 2, 360: 4, 364: -4, 368: 10, 372: 7, 376: 9, 380: 1}
+print(sorted(mips_status['Data']))

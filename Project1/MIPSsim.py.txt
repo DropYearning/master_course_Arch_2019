@@ -6,6 +6,8 @@
 
 # On my honor, I have neither given nor received unauthorized aid on this assignment.
 
+import sys
+
 START_ADDRESS = 256  # 起始地址
 INSTRUCTION_SEQUENCE = {}  # 指令序列
 INSTRUCTION_COUNT = 0  # 指令条数
@@ -259,12 +261,12 @@ def disassembler_instruction(input_file_name, output_file_name,
 
 
 def disassembler_memory(input_file_name, output_file_name,
-                        start_address):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
+                        instruction_count):  # 反汇编器(第二部分)，将指令序列后的补码序列写入到存储空间（data），并写入文件disassembly.txt
     memory_space = {}
     input_file_pointer = open(input_file_name)
     output_file_pointer = open(output_file_name, 'a')
-    current_address = start_address
-    input_lines = input_file_pointer.readlines()[21:]
+    current_address = START_ADDRESS + instruction_count * 4
+    input_lines = input_file_pointer.readlines()[instruction_count:]
     for line in input_lines:
         line_value = twos_complement_to_value(line)
         # print(line[0:32] + '\t' + str(current_address) + '\t' + str(line_value))
@@ -437,7 +439,7 @@ def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状�
     # print('')
     output_file_pointer.write("Registers" + '\n')
     # print("Registers")
-    for i in range(32):
+    for i in range(32):  # 打印32个寄存器状态
         if i % 8 == 0:
             if i < 9:
                 output_file_pointer.write('R0' + str(i) + ':\t' + str(mips_status['Registers'][i]) + '\t')
@@ -456,8 +458,8 @@ def print_status(mips_status, output_file_name):  # 输出某一个Cycle的状�
     # print("Data")
     output_file_pointer.write("Data" + '\n')
     word_number = len(mips_status['Data'])  # 存储器中的字数
-    data_start_address = list(mips_status['Data'])[0]
-    for i in range(word_number):
+    data_start_address = sorted(mips_status['Data'])[0]
+    for i in range(word_number):  # 打印存储器状态
         current_address = data_start_address + i * 4
         if i % 8 == 0:
             output_file_pointer.write(
@@ -479,14 +481,21 @@ def run():  # 运行模拟器，输出每一个周期的状态结果
     output_file_pointer.truncate()  # 清空文件simulation.txt
     output_file_pointer.close()
     global MIPS_STATUS
-    while MIPS_STATUS['END'] != True:
+    while not MIPS_STATUS['END']:
         MIPS_STATUS = instruction_operation(INSTRUCTION_SEQUENCE[MIPS_STATUS['NPC']], MIPS_STATUS)
         print_status(MIPS_STATUS, 'simulation.txt')
 
 
 if __name__ == '__main__':
-    INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
-    MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
+    # 默认sys.argv[1]为输入的文件名
+    INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt', START_ADDRESS)
+    MIPS_STATUS['Data'] = disassembler_memory(sys.argv[1], 'disassembly.txt', INSTRUCTION_COUNT)
+
+    # 文件名写死
+    # INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
+    # MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
+    print(INSTRUCTION_COUNT)
     print(INSTRUCTION_SEQUENCE)
+    print(MIPS_STATUS['Data'])
     print("\t")
     run()
