@@ -494,8 +494,8 @@ if __name__ == '__main__':
     # 文件名写死
     # INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
     # MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', START_ADDRESS + INSTRUCTION_COUNT * 4)
-    print(INSTRUCTION_COUNT)
-    print(INSTRUCTION_SEQUENCE)
-    print(MIPS_STATUS['Data'])
-    print("\t")
+    # print(INSTRUCTION_COUNT)
+    # print(INSTRUCTION_SEQUENCE)
+    # print(MIPS_STATUS['Data'])
+    # print("\t")
     run()
