@@ -289,7 +289,7 @@ def instruction_operation(instruction, old_status):
         temp_status['NPC'] = int(target)
 
     elif op == 'JR':  # JR rs [PC ← rs]
-        rs_index = int(instruction[3:])
+        rs_index = int(instruction[4:])
         temp_status['NPC'] = temp_status['Registers'][rs_index]
 
     elif op == 'BEQ':  # BEQ rs, rt, offset 【if rs = rt then branch】
@@ -376,9 +376,9 @@ def instruction_operation(instruction, old_status):
         temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] & temp_status['Registers'][rt_index]
 
     elif op == 'OR':  # OR rd, rs, rt[rd ← rs OR rt] （按位或）
-        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
-        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        rd_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[3:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[3:].replace(" ", "").split(',')[2][1:])
         temp_status['Registers'][rd_index] = temp_status['Registers'][rs_index] | temp_status['Registers'][rt_index]
 
     elif op == 'XOR':  # XOR rd, rs, rt[rd ← rs XOR rt] (按位异或)
