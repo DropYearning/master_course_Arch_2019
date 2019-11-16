@@ -30,6 +30,41 @@ MIPS_STATUS = {
     'Post_MEM': "",  # 1 entry
 }
 
+# 计分卡数据结构
+SCOREBOARD = {
+    'Instruction_Status': {  # 指令状态表
+        # Read operands = 1
+        # Issue = 2
+        # Execution complete = 3
+        # write back = 4
+    },
+    'Function_Unit_Status': {  # 功能单元状态表
+        # Project2 有ALU1和ALU2两个执行单元
+        'ALU1': {
+            'Busy': False,
+            'Op': "",  # 该功能单元正在执行的指令
+            'Fi': None,  # 目标寄存器
+            'Fj': None,  # 源寄存器1
+            'Fk': None,  # 源寄存器2
+            'Qj': "",  # 生成Fj的功能单元
+            'Qk': "",  # 生成Fk的功能单元
+            'Rj': False,  # Fj是否准备完毕
+            'Rk': False,  # Fk是否准备完毕
+        },
+        'ALU2': {
+            'Busy': False,
+            'Op': "",  # 该功能单元正在执行的指令
+            'Fi': None,  # 目标寄存器
+            'Fj': None,  # 源寄存器1
+            'Fk': None,  # 源寄存器2
+            'Qj': "",  # 生成Fj的功能单元
+            'Qk': "",  # 生成Fk的功能单元
+            'Rj': False,  # Fj是否准备完毕
+            'Rk': False,  # Fk是否准备完毕
+        },
+    },
+    'Regs_Result_Status': [''] * 32,  # 寄存器结果表(哪一个功能单元将写这个寄存器)
+}
 
 
 def twos_complement_to_value(input_str):  # 二进制补码转整数真值
