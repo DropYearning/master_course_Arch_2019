@@ -334,42 +334,28 @@ def print_memory(mips_status, output_file_pointer):  # 输出存储器内容
 
 def print_cycle_status(mips_status, output_file_name):  # 输出每个周期的模拟结果
     output_file_pointer = open(output_file_name, 'a')
-    # print('--------------------')
     output_file_pointer.write("--------------------" + '\n')
-    # print("Cycle:" + str(mips_status['CycleNumber']))
     output_file_pointer.write("Cycle:" + str(mips_status['CycleNumber']) + '\n')
-    # print("")
     output_file_pointer.write('\n')
-    # print("IF Unit:")
     output_file_pointer.write("IF Unit:" + '\n')
-    # print("\t" + "Waiting Instruction: " + mips_status['IF_Waiting'])
     output_file_pointer.write("\t" + "Waiting Instruction: " + mips_status['IF_Waiting'] + '\n')
-    # print("\t" + "Executed Instruction: " + mips_status['IF_Executed'])
     output_file_pointer.write("\t" + "Executed Instruction: " + mips_status['IF_Executed'] + '\n')
-    # print("Pre-Issue Queue:")
     output_file_pointer.write("Pre-Issue Queue:"+ '\n')
-    # print("\t" + "Entry 0:" + mips_status['Pre_Issue'][0])
     for i in range(4):
         count = len(mips_status['Pre_Issue'])
         if i < count:
             output_file_pointer.write("\t" + "Entry " + str(i) + ":" + mips_status['Pre_Issue'][i] + '\n')
-            # print("\t" + "Entry 1:" + mips_status['Pre_Issue'][1])
         else:
             output_file_pointer.write("\t" + "Entry " + str(i) + ":" + '\n')
-            # print("\t" + "Entry 1:")
     output_file_pointer.write("Pre-ALU1 Queue:" + '\n')
-    # print("Pre-ALU1 Queue:")
     for j in range(2):
         count = len(mips_status['Pre_ALU1'])
         if j < count:
             output_file_pointer.write("\t" + "Entry " + str(j) + ":" + mips_status['Pre_ALU1'][j] + '\n')
         else:
             output_file_pointer.write("\t" + "Entry " + str(j) + ":" + '\n')
-    # print("Pre-MEM Queue:" + mips_status['Pre_MEM'])
     output_file_pointer.write("Pre-MEM Queue:" + mips_status['Pre_MEM'] + '\n')
-    # print("Post-MEM Queue:" + mips_status['Post_MEM'])
     output_file_pointer.write("Post-MEM Queue:" + mips_status['Post_MEM'] + '\n')
-    # print("Pre-ALU2 Queue:")
     output_file_pointer.write("Pre-ALU2 Queue:" + '\n')
     for k in range(2):
         count = len(mips_status['Pre_ALU2'])
@@ -377,9 +363,7 @@ def print_cycle_status(mips_status, output_file_name):  # 输出每个周期的�
             output_file_pointer.write("\t" + "Entry " + str(k) + ":" + mips_status['Pre_ALU2'][k] + '\n')
         else:
             output_file_pointer.write("\t" + "Entry " + str(k) + ":" + '\n')
-    # print("Post-ALU2 Queue:" + mips_status['Post_ALU2'])
     output_file_pointer.write("Post-ALU2 Queue:" + mips_status['Post_ALU2'] + '\n')
-    # print('')
     output_file_pointer.write('\n')
     print_reg(mips_status, output_file_pointer)
     print_memory(mips_status, output_file_pointer)
