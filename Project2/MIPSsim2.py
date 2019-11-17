@@ -18,52 +18,23 @@ MIPS_STATUS = {
     'Registers': [0] * 32,  # 32个MIPS寄存器
     'Data': {},  # 模拟的存储器空间
     'END': False,  # 标志程序是否运行结束
-    # 下面两个变量用于在simulation中输出IF Unit的状态
-    "IF_Waiting": "",  #
-    "IF_Executed": "",  #
+    # 下面两个变量用于在simulation中输出IF Unit的状态(只有分支指令会进入下面两个buffer)
+    "IF_Stall": False,  # IF功能单元是否stall
+    "IF_Waiting": "",  # 使IF单元stall的分支指令
+    "IF_Executed": "",
     # 下面是一些流水线buffer, 为保证冒号后不多空格，存储的指令格式为" [instruction]"
-    'Pre_Issue': [''] * 4,  # 4 entry
-    'Pre_ALU1': [''] * 2,  # 2 entry
-    'Pre_ALU2': [''] * 2,  # 2 entry
+    'Pre_Issue': [],  # 4 entry
+    'Pre_ALU1': [],  # 2 entry
+    'Pre_ALU2': [],  # 2 entry
     'Pre_MEM': "",  # 1 entry
     'Post_ALU2': "",  # 1 entry
     'Post_MEM': "",  # 1 entry
 }
 
 # 计分卡数据结构
-SCOREBOARD = {
-    'Instruction_Status': {  # 指令状态表
-        # Read operands = 1
-        # Issue = 2
-        # Execution complete = 3
-        # write back = 4
-    },
-    'Function_Unit_Status': {  # 功能单元状态表
-        # Project2 有ALU1和ALU2两个执行单元
-        'ALU1': {
-            'Busy': False,
-            'Op': "",  # 该功能单元正在执行的指令
-            'Fi': None,  # 目标寄存器
-            'Fj': None,  # 源寄存器1
-            'Fk': None,  # 源寄存器2
-            'Qj': "",  # 生成Fj的功能单元
-            'Qk': "",  # 生成Fk的功能单元
-            'Rj': False,  # Fj是否准备完毕
-            'Rk': False,  # Fk是否准备完毕
-        },
-        'ALU2': {
-            'Busy': False,
-            'Op': "",  # 该功能单元正在执行的指令
-            'Fi': None,  # 目标寄存器
-            'Fj': None,  # 源寄存器1
-            'Fk': None,  # 源寄存器2
-            'Qj': "",  # 生成Fj的功能单元
-            'Qk': "",  # 生成Fk的功能单元
-            'Rj': False,  # Fj是否准备完毕
-            'Rk': False,  # Fk是否准备完毕
-        },
-    },
-    'Regs_Result_Status': [''] * 32,  # 寄存器结果表(哪一个功能单元将写这个寄存器)
+SCOREBOARD_STATUS = {
+    'Regs_Result_Status': [''] * 32,  # 寄存器结果表(哪一条指令将写这个寄存器)
+    'Regs_Operand_Status': [''] * 32,  # 寄存器操作数表(哪一条指令将读这个寄存器)
 }
 
 
@@ -378,35 +349,207 @@ def print_cycle_status(mips_status, output_file_name):  # 输出每个周期的�
     # print("Pre-Issue Queue:")
     output_file_pointer.write("Pre-Issue Queue:"+ '\n')
     # print("\t" + "Entry 0:" + mips_status['Pre_Issue'][0])
-    output_file_pointer.write("\t" + "Entry 0:" + mips_status['Pre_Issue'][0] + '\n')
-    # print("\t" + "Entry 1:" + mips_status['Pre_Issue'][1])
-    output_file_pointer.write("\t" + "Entry 1:" + mips_status['Pre_Issue'][1] + '\n')
-    # print("\t" + "Entry 2:" + mips_status['Pre_Issue'][2])
-    output_file_pointer.write("\t" + "Entry 2:" + mips_status['Pre_Issue'][2] + '\n')
-    # print("\t" + "Entry 3:" + mips_status['Pre_Issue'][3])
-    output_file_pointer.write("\t" + "Entry 3:" + mips_status['Pre_Issue'][3] + '\n')
-    # print("Pre-ALU1 Queue:")
+    for i in range(4):
+        count = len(mips_status['Pre_Issue'])
+        if i < count:
+            output_file_pointer.write("\t" + "Entry " + str(i) + ":" + mips_status['Pre_Issue'][i] + '\n')
+            # print("\t" + "Entry 1:" + mips_status['Pre_Issue'][1])
+        else:
+            output_file_pointer.write("\t" + "Entry " + str(i) + ":" + '\n')
+            # print("\t" + "Entry 1:")
     output_file_pointer.write("Pre-ALU1 Queue:" + '\n')
-    # print("\t" + "Entry 0:" + mips_status['Pre_ALU1'][0])
-    output_file_pointer.write("\t" + "Entry 0:" + mips_status['Pre_ALU1'][0] + '\n')
-    # print("\t" + "Entry 1:" + mips_status['Pre_ALU1'][1])
-    output_file_pointer.write("\t" + "Entry 1:" + mips_status['Pre_ALU1'][1] + '\n')
+    # print("Pre-ALU1 Queue:")
+    for j in range(2):
+        count = len(mips_status['Pre_ALU1'])
+        if j < count:
+            output_file_pointer.write("\t" + "Entry " + str(j) + ":" + mips_status['Pre_ALU1'][j] + '\n')
+        else:
+            output_file_pointer.write("\t" + "Entry " + str(j) + ":" + '\n')
     # print("Pre-MEM Queue:" + mips_status['Pre_MEM'])
     output_file_pointer.write("Pre-MEM Queue:" + mips_status['Pre_MEM'] + '\n')
     # print("Post-MEM Queue:" + mips_status['Post_MEM'])
     output_file_pointer.write("Post-MEM Queue:" + mips_status['Post_MEM'] + '\n')
     # print("Pre-ALU2 Queue:")
     output_file_pointer.write("Pre-ALU2 Queue:" + '\n')
-    # print("\t" + "Entry 0:" + mips_status['Pre_ALU2'][0])
-    output_file_pointer.write("\t" + "Entry 0:" + mips_status['Pre_ALU2'][0] + '\n')
-    # print("\t" + "Entry 1:" + mips_status['Pre_ALU2'][1])
-    output_file_pointer.write("\t" + "Entry 1:" + mips_status['Pre_ALU2'][1] + '\n')
+    for k in range(2):
+        count = len(mips_status['Pre_ALU2'])
+        if k < count:
+            output_file_pointer.write("\t" + "Entry " + str(k) + ":" + mips_status['Pre_ALU2'][k] + '\n')
+        else:
+            output_file_pointer.write("\t" + "Entry " + str(k) + ":" + '\n')
     # print("Post-ALU2 Queue:" + mips_status['Post_ALU2'])
     output_file_pointer.write("Post-ALU2 Queue:" + mips_status['Post_ALU2'] + '\n')
     # print('')
     output_file_pointer.write('\n')
     print_reg(mips_status, output_file_pointer)
     print_memory(mips_status, output_file_pointer)
+
+
+def if_instruction_operation(instruction, previous_scoreboard, previous_mips_status):  # 每种指令在IF单元需要进行的操作
+    temp_modified_mips_status = previous_mips_status
+    op = instruction.split()[0]
+    if op == 'BREAK':  # 若提取到的是BREAK指令
+        temp_modified_mips_status['IF_Executed'] = ' [BREAK]'  # 立即执行BREAK
+        temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+        temp_modified_mips_status['END'] = True
+        # BREAK指令不改变PC（改了也没有意义）
+    elif op == "NOP":  # 若提取到的是NOP指令
+        temp_modified_mips_status['IF_Executed'] = ' [NOP]'  # 立即执行NOP
+        # no operation
+        temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+    elif op == 'J':  # 若提取到的是J指令(一定立即发生跳转)
+        target_address = int(instruction.split()[1][1:])
+        temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # 立即执行J
+        temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+    elif op == 'JR':  # 若提取到的是JR指令
+        rs_index = int(instruction.split()[1][1:])
+        if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            target_address = previous_mips_status['Registers'][rs_index]
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # JR立即执行
+            temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+        else:  # rs没有准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # JR进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            # 已经暂停取指，PC改变也没有意义
+    elif op == 'BEQ':  # 若提取到的是BEQ指令
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        target_address = previous_mips_status['PC'] + offset
+        if previous_scoreboard['Regs_Result_Status'][rs_index] == '' and \
+                previous_scoreboard['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BEQ立即执行
+            if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
+                # rs == rt 才跳转
+                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+            else:  # 否则PC正常+4
+                temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+        else:  # rs和rt没准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # BEQ进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            # 已经暂停取指，PC改变也没有意义
+    elif op in ['BLTZ', 'BGTZ']:  # 若提取到的是BGTZ或者BLTZ指令 , BLTZ rs, offset [if rs < 0 then branch]
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        target_address = previous_mips_status['PC'] + offset
+        if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BGTZ/BLTZ立即执行
+            if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
+                temp_modified_mips_status['PC'] = target_address  # 修改PC
+            elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
+                temp_modified_mips_status['PC'] = target_address  # 修改PC
+            else:  # 否则PC正常+4
+                temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+        else:  # rs没准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # 指令进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            # 已经暂停取指，PC改变也没有意义
+    else:  # 若提取到的是其他指令(SW,LW,运算指令等) 【这些指令会进入Pre-issue中，需要更改pre-issue的空位数】
+        # IF单元不检查这些指令的操作数是否准备完毕，只要有空位就进入Pre-issue，最后要更改PC+4
+        # pre_issue_count = len(previous_mips_status['Pre_Issue'])
+        # 检查空位的操作在前面已经做过，这里直接append
+        temp_modified_mips_status['Pre_Issue'].append(' [' + instruction + ']')  # 写入pre-issue
+        temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+    return temp_modified_mips_status
+
+
+def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元在每个周期的操作
+    # IF单元承担改变PC的任务
+    # stall_sign = previous_mips_status['IF_Stall']  # 在IF单元最后（本周期末）更新IF_Stall
+    temp_modified_mips_status = previous_mips_status
+
+    # 若IF单元Stall，本周期不提取任何指令
+    if previous_mips_status['IF_Stall']:
+        # 检查[Waiting Instruction]中原来不可用的寄存器是否已经可用
+        instruction_waiting = previous_mips_status['IF_Waiting'][2:-1]
+        op = instruction_waiting.split()[0]
+        if op == 'JR':
+            rs_index = int(instruction_waiting.split()[1][1:])
+            if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+                target_address = previous_mips_status['Registers'][rs_index]
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # JR执行
+                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+                temp_modified_mips_status['IF_Stall'] = False  # 不再提取其他指令
+        elif op == 'BEQ':
+            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
+            rt_index = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
+            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[2][1:])
+            target_address = previous_mips_status['PC'] + offset
+            if previous_scoreboard['Regs_Result_Status'][rs_index] == '' and \
+                    previous_scoreboard['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BEQ执行
+                temp_modified_mips_status['IF_Stall'] = False  # 不再提取其他指令
+                if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
+                    # rs == rt 才跳转
+                    temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+                else:  # 否则PC正常+4
+                    temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+        elif op in ['BLTZ', 'BGTZ']:
+            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
+            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
+            target_address = previous_mips_status['PC'] + offset
+            if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BGTZ/BLTZ执行
+                temp_modified_mips_status['IF_Stall'] = False  # 不再提取其他指令
+                if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
+                    temp_modified_mips_status['PC'] = target_address  # 修改PC
+                elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
+                    temp_modified_mips_status['PC'] = target_address  # 修改PC
+                else:  # 否则PC正常+4
+                    temp_modified_mips_status['PC'] = previous_mips_status['PC'] + 4  # PC = PC +4
+
+    # 若Pre-issue没有空位，本周期不提取任何指令
+    elif len(previous_mips_status['Pre_Issue']) == 4:
+        # If there is no empty slot in the Pre-issue buffer at the end of the last cycle,
+        # no instruction can be fetched at the current cycle.
+        # 此时PC不变
+        pass
+
+    # 若本周期可以提取1条指令
+    elif len(previous_mips_status['Pre_Issue']) == 3:
+        instruction_fetched = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
+        temp_modified_mips_status = if_instruction_operation(instruction_fetched, previous_scoreboard,
+                                                             previous_mips_status, temp_modified_mips_status)
+
+    # 若本周期可以提取2条指令
+    elif len(previous_mips_status['Pre_Issue']) <= 2:
+        instruction_fetched_1 = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
+        op1 = instruction_fetched_1.split()[0]
+        if op1 in ['J', 'JR', 'BEQ', 'BLTZ', 'BGTZ', 'BREAK']:  # 不再取instruction_fetched_2
+            temp_modified_mips_status = if_instruction_operation(instruction_fetched_1, previous_scoreboard,
+                                                                 previous_mips_status, temp_modified_mips_status)
+            return temp_modified_mips_status
+        else:
+            instruction_fetched_2 = INSTRUCTION_SEQUENCE[previous_mips_status['PC'] + 4]  # 没有分支，所以PC=PC+4
+            temp_modified_mips_status = if_instruction_operation(instruction_fetched_1, previous_scoreboard,
+                                                                 previous_mips_status, temp_modified_mips_status)
+            temp_modified_mips_status = if_instruction_operation(instruction_fetched_2, previous_scoreboard,
+                                                                 previous_mips_status, temp_modified_mips_status)
+    return temp_modified_mips_status
+
+
+def issue_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # Issue功能单元在每个周期的操作
+    pass
+
+
+def alu1_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # ALU1功能单元在每个周期的操作
+    pass
+
+
+def alu2_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # ALU2功能单元在每个周期的操作
+    pass
+
+
+def mem_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # MEM功能单元在每个周期的操作
+    pass
+
+
+def wb_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # WB功能单元在每个周期的操作
+    pass
+
 
 
 if __name__ == '__main__':
