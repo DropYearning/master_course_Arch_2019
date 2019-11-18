@@ -31,11 +31,9 @@ MIPS_STATUS = {
     'Post_MEM': "",  # 1 entry
     # 下面是一些用在MEM和WB单元的buffer
     'Pre_MEM_target_address': None,  # LS类指令的目标地址
-    'Pre_MEM_target_reg': None,  # LS类指令的目标寄存器
+    'Pre_MEM_value': None,  # Store指令需要写的值
     'Post_MEM_value': None,  # Load指令需要写入的值
-    'Post_MEM_target_reg': None,  # Load指令需要写入的寄存器
     'Post_ALU2_value': None,  # 非LS类指令的结果值
-    'Post_ALU2_target_reg': None  # 非LS类指令的目标寄存器
 }
 
 # 计分卡数据结构
@@ -523,8 +521,8 @@ def fetch_operation(previous_mips_status):  # IF功能单元在每个周期的�
 
 
 def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写的寄存器序号集合
-    read_regs_set = set()
-    write_regs_set = set()
+    read_regs_set = set('init')
+    write_regs_set = set('init')
     op = instruction.split()[0]
     if op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
@@ -563,14 +561,18 @@ def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写�
 def judge_issue(current_instruction, current_index_in_list, previous_mips_status):
     # instruction_index_in_list是当前指令在pre-issue单元中的序号
     global SCOREBOARD_STATUS
-    all_early_read_regs_set = set()  # 所有pre-issue中在该指令前的指令要读的寄存器
-    all_early_write_regs_set = set()  # 所有pre-issue中在该指令前的指令要写的寄存器
+    all_early_read_regs_set = set('init')  # 所有pre-issue中在该指令前的指令要读的寄存器
+    all_early_write_regs_set = set('init')  # 所有pre-issue中在该指令前的指令要写的寄存器
     current_read_regs_set, current_write_regs_set = extract_regs(current_instruction)
     for i in range(current_index_in_list):
         early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
         early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
         all_early_read_regs_set.union(early_read_regs_set)
         all_early_write_regs_set.union(early_write_regs_set)
+    print("all_early_read_regs_set", all_early_read_regs_set)
+    print("all_early_write_regs_set", all_early_write_regs_set)
+    print("current_read_regs_set", current_read_regs_set)
+    print("current_write_regs_set", current_write_regs_set)
     # 检查该指令与Pre-issue单元中在它前面的指令之间的相关性
     # Pre-issue队列中在它前面的指令不和它写同一个寄存器
     for reg_index in current_write_regs_set:
@@ -700,35 +702,136 @@ def alu1_operation(previous_mips_status, previous_modified_mips_status):  # ALU1
     # The instruction and its result will be written into the Pre-MEM buffer at the end of the current cycle.
     temp_modified_mips_status = previous_modified_mips_status
     if len(previous_mips_status['Pre_ALU1']) == 0:  # 若pre-alu1中没有等待执行的指令
-        pass
+        # 本周期末 Pre-MEM应为空，清空
+        temp_modified_mips_status['Pre_MEM'] = ''
+        temp_modified_mips_status['Pre_MEM_target_address'] = None
+        temp_modified_mips_status['Pre_MEM_value'] = None
     else:  # 从pre-alu1队列中取一条执行
         instruction_executed = previous_mips_status['Pre_ALU1'][0][2:-1]
         # 从Pre-ALU1队列中删除它
         del temp_modified_mips_status['Pre_ALU1'][0]
         op = instruction_executed.split()[0]
         if op == 'LW':  # LW: IF, Issue, ALU1, MEM, WB;
-            target_regs = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])  # 写目标寄存器
             comma_index = int(instruction_executed[3:].replace(" ", "").index(','))
             left_parenthesis_index = int(instruction_executed[3:].replace(" ", "").index('('))
             offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
             base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
             # LW rt, offset(base) [rt ← memory[base+offset]]
             target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]   # 读目标地址
-            # 将状态信息写入下一级流水线单元
+            # 将状态信息写入下一级流水线buffer
+            temp_modified_mips_status['Pre_MEM'] = ' [' + instruction_executed + ']'
             temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
-            temp_modified_mips_status['Pre_MEM_target_reg'] = target_regs
         else:  # SW: IF, Issue, ALU1, MEM;
-            target_regs = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])  # 写目标寄存器
+            rt_index = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])
             comma_index = int(instruction_executed[3:].replace(" ", "").index(','))
             left_parenthesis_index = int(instruction_executed[3:].replace(" ", "").index('('))
             offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
             base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
             # SW rt, offset(base) [memory[base+offset] ← rt]
             target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]  # 写目标地址
-            # 将状态信息写入下一级流水线单元
+            # 将状态信息写入下一级流水线buffer
+            temp_modified_mips_status['Pre_MEM'] = ' [' + instruction_executed + ']'
             temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
-            temp_modified_mips_status['Pre_MEM_target_reg'] = target_regs
+            temp_modified_mips_status['Pre_MEM_value'] = previous_mips_status['Registers'][rt_index]
+
     return temp_modified_mips_status
+
+
+def alu2_instruction_operation(instruction, previous_mips_status):
+    result = None
+    op = instruction.split(' ')[0]
+    if op == 'SLL':  # SLL rd, rt, sa [rd ← rt << sa]
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = shift('SLL', sa, previous_mips_status['Registers'][rt_index])
+
+    elif op == 'SRL':  # SRL rd, rt, sa 【rd ← rt >> sa】
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = shift('SRL', sa, previous_mips_status['Registers'][rt_index])
+
+    elif op == 'SRA':  # SRA rd, rt, sa 【rd ← rt >> sa (arithmetic)】
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = shift('SRA', sa, previous_mips_status['Registers'][rt_index])
+
+    elif op == 'ADD':  # ADD rd, rs, rt 【rd ← rs + rt】
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] + previous_mips_status['Registers'][rt_index]
+
+    elif op == 'SUB':  # SUB rd, rs, rt [rd ← rs - rt]
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] - previous_mips_status['Registers'][rt_index]
+
+    elif op == 'MUL':  # MUL rd, rs, rt [rd ← rs × rt]
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] * previous_mips_status['Registers'][rt_index]
+
+    elif op == 'AND':  # AND rd, rs, rt[rd ← rs AND rt]（按位与）
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] & previous_mips_status['Registers'][rt_index]
+
+    elif op == 'OR':  # OR rd, rs, rt[rd ← rs OR rt] （按位或）
+        rd_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[3:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[3:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] | previous_mips_status['Registers'][rt_index]
+
+    elif op == 'XOR':  # XOR rd, rs, rt[rd ← rs XOR rt] (按位异或)
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] ^ previous_mips_status['Registers'][rt_index]
+
+    elif op == 'NOR':  # NOR rd, rs, rt[rd ← rs NOR rt] (按位或非)
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = ~ (previous_mips_status['Registers'][rs_index] | previous_mips_status['Registers'][rt_index])
+
+    elif op == 'SLT':  # SLT rd, rs, rt [rd ← (rs < rt)]
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = 1 if previous_mips_status['Registers'][rs_index] < previous_mips_status['Registers'][
+            rt_index] else 0
+
+    elif op == 'ADDI':  # ADDI rt, rs, immediate [rt ← rs + immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] + imm
+
+    elif op == 'ANDI':  # ANDI rt, rs, immediate [rt ← rs AND immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] & imm
+
+    elif op == 'ORI':  # ORI rt, rs, immediate [rt ← rs OR immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] | imm
+
+    elif op == 'XORI':  # XORI rt, rs, immediate [rt ← rs OR immediate]
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        imm = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        result = previous_mips_status['Registers'][rs_index] ^ imm
+
+    return result
 
 
 def alu2_operation(previous_mips_status, previous_modified_mips_status):  # ALU2功能单元在每个周期的操作
@@ -736,26 +839,67 @@ def alu2_operation(previous_mips_status, previous_modified_mips_status):  # ALU2
     # The instruction and its result will be written into the Post-ALU2 buffer at the end of the current cycle.
     temp_modified_mips_status = previous_modified_mips_status
     if len(previous_mips_status['Pre_ALU2']) == 0:  # 若pre-alu2中没有等待执行的指令
-        pass
-    else:
+        # 若Pre-alu2为空，则这个周期末post_alu2肯定空
+        temp_modified_mips_status['Post_ALU2'] = ''
+        temp_modified_mips_status['Post_ALU2_value'] = None
+    else:  # 取一条指令
         instruction_executed = previous_mips_status['Pre_ALU2'][0][2:-1]
         # 从Pre-ALU2队列中删除它
         del temp_modified_mips_status['Pre_ALU2'][0]
-        op = instruction_executed.split()[0]
-        # 分类执行这条指令
-
-
+        # 执行这条指令
+        result = alu2_instruction_operation(instruction_executed, previous_mips_status)
+        # 写入下一级流水线Buffer
+        temp_modified_mips_status['Post_ALU2'] = ' [' + instruction_executed + ']'
+        temp_modified_mips_status['Post_ALU2_value'] = result
     return temp_modified_mips_status
 
 
 def mem_operation(previous_mips_status, previous_modified_mips_status):  # MEM功能单元在每个周期的操作
-    pass
+    # The MEM unit handles LW and SW instructions.
+    temp_modified_mips_status = previous_modified_mips_status
+    if len(previous_mips_status['Pre_MEM']) == 0:
+        # 若Pre-MEM为空，则本周期末Post_MEM中也肯定为空
+        temp_modified_mips_status['Post_MEM'] = ''
+        temp_modified_mips_status['Post_MEM_value'] = None
+    else:
+        instruction_executed = previous_mips_status['Pre_MEM'][0][2:-1]
+        op = instruction_executed.split()[0]
+        # 这里不用清空Pre-MEM，在alu1_operation中已经清空过
+        value = previous_mips_status['Pre_MEM_value']
+        target_address = previous_mips_status['Pre_MEM_target_address']
+        if op == 'LW':  # 读存储器
+            fetched_value = previous_mips_status['Data'][target_address]
+            temp_modified_mips_status['Post_MEM'] = ' [' + instruction_executed + ']'
+            temp_modified_mips_status['Post_MEM_value'] = fetched_value
+        else:  # 写存储器
+            temp_modified_mips_status['Data'][target_address] = value
+            temp_modified_mips_status['Post_MEM'] = ''
+            temp_modified_mips_status['Post_MEM_value'] = None
+    return temp_modified_mips_status
 
 
 def wb_operation(previous_mips_status, previous_modified_mips_status):  # WB功能单元在每个周期的操作
     # 若有指令要WB，需要在SCOREBOARD的Result表中删除对应项
-
-    pass
+    temp_modified_mips_status = previous_modified_mips_status
+    # 对Post_MEM写回：(一定是LW指令)
+    if len(previous_mips_status['Post_MEM']) == 0:
+        pass
+    else:
+        instruction_executed = previous_mips_status['Post_MEM'][0][2:-1]
+        rt_index = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])
+        temp_modified_mips_status['Data'][rt_index] = previous_mips_status['Post_MEM_value']
+    # 对Post_ALU2写回：(一定是非LW指令)
+    if len(previous_mips_status['Post_ALU2']) == 0:
+        pass
+    else:
+        instruction_executed = previous_mips_status['Post_ALU2'][0][2:-1]
+        op = instruction_executed.split(' ')[0]
+        if op == 'OR':
+            target_reg = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])
+        else:
+            target_reg = int(instruction_executed[4:].replace(" ", "").split(',')[0][1:])
+        temp_modified_mips_status['Data'][target_reg] = previous_mips_status['Post_ALU2_value']
+    return temp_modified_mips_status
 
 
 def run_simulation(start_mips_status):  # 开始模拟
@@ -765,11 +909,12 @@ def run_simulation(start_mips_status):  # 开始模拟
         # 一个Cycle开始
         temp_mips_status['CycleNumber'] = temp_mips_status['CycleNumber'] + 1
         temp_mips_status = fetch_operation(previous_mips_status)  # IF单元操作
-        temp_mips_status = issue_operation(previous_mips_status, temp_mips_status)  # ISSUE单元操作
+
         temp_mips_status = alu1_operation(previous_mips_status, temp_mips_status)  # ALU1单元操作
         temp_mips_status = alu2_operation(previous_mips_status, temp_mips_status)  # ALU1单元操作
         temp_mips_status = mem_operation(previous_mips_status, temp_mips_status)  # MEM单元操作
         temp_mips_status = wb_operation(previous_mips_status, temp_mips_status)  # WB单元操作
+        temp_mips_status = issue_operation(previous_mips_status, temp_mips_status)  # ISSUE单元操作
         # 一个Cycle结束，打印这个Cycle结束时的状态
         print_cycle_status(temp_mips_status, 'simulation.txt')
         previous_mips_status = temp_mips_status  # 更新上一个周期的状态
