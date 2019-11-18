@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2019/11/16 5:42 下午
+# @Time    : 2019/11/17 5:42 下午
 # @Author  : Zhou Liang
 # @File    : MIPSsim2.py.py
 # @Software: PyCharm
@@ -23,12 +23,19 @@ MIPS_STATUS = {
     "IF_Waiting": "",  # 使IF单元stall的分支指令
     "IF_Executed": "",
     # 下面是一些流水线buffer, 为保证冒号后不多空格，存储的指令格式为" [instruction]"
-    'Pre_Issue': [],  # 4 entry
-    'Pre_ALU1': [],  # 2 entry
-    'Pre_ALU2': [],  # 2 entry
+    'Pre_Issue': [],  # 4 entry at most
+    'Pre_ALU1': [],  # 2 entry at most
+    'Pre_ALU2': [],  # 2 entry at most
     'Pre_MEM': "",  # 1 entry
     'Post_ALU2': "",  # 1 entry
     'Post_MEM': "",  # 1 entry
+    # 下面是一些用在MEM和WB单元的buffer
+    'Pre_MEM_target_address': None,  # LS类指令的目标地址
+    'Pre_MEM_target_reg': None,  # LS类指令的目标寄存器
+    'Post_MEM_value': None,  # Load指令需要写入的值
+    'Post_MEM_target_reg': None,  # Load指令需要写入的寄存器
+    'Post_ALU2_value': None,  # 非LS类指令的结果值
+    'Post_ALU2_target_reg': None  # 非LS类指令的目标寄存器
 }
 
 # 计分卡数据结构
@@ -369,8 +376,9 @@ def print_cycle_status(mips_status, output_file_name):  # 输出每个周期的�
     print_memory(mips_status, output_file_pointer)
 
 
-def if_instruction_operation(instruction, previous_scoreboard, previous_mips_status):  # 每种指令在IF单元需要进行的操作
-    temp_modified_mips_status = previous_mips_status
+def fetch_one_instruction(instruction, previous_mips_status, previous_modified_mips_status):  # 每种指令在IF单元需要进行的操作
+    temp_modified_mips_status = previous_modified_mips_status
+    global SCOREBOARD_STATUS
     op = instruction.split()[0]
     if op == 'BREAK':  # 若提取到的是BREAK指令
         temp_modified_mips_status['IF_Executed'] = ' [BREAK]'  # 立即执行BREAK
@@ -387,7 +395,7 @@ def if_instruction_operation(instruction, previous_scoreboard, previous_mips_sta
         temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
     elif op == 'JR':  # 若提取到的是JR指令
         rs_index = int(instruction.split()[1][1:])
-        if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
             target_address = previous_mips_status['Registers'][rs_index]
             temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # JR立即执行
             temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
@@ -400,8 +408,8 @@ def if_instruction_operation(instruction, previous_scoreboard, previous_mips_sta
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         target_address = previous_mips_status['PC'] + offset
-        if previous_scoreboard['Regs_Result_Status'][rs_index] == '' and \
-                previous_scoreboard['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
+                SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
             temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BEQ立即执行
             if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
                 # rs == rt 才跳转
@@ -416,7 +424,7 @@ def if_instruction_operation(instruction, previous_scoreboard, previous_mips_sta
         rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         target_address = previous_mips_status['PC'] + offset
-        if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
             temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BGTZ/BLTZ立即执行
             if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
                 temp_modified_mips_status['PC'] = target_address  # 修改PC
@@ -437,11 +445,11 @@ def if_instruction_operation(instruction, previous_scoreboard, previous_mips_sta
     return temp_modified_mips_status
 
 
-def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元在每个周期的操作
+def fetch_operation(previous_mips_status):  # IF功能单元在每个周期的操作
     # IF单元承担改变PC的任务
     # stall_sign = previous_mips_status['IF_Stall']  # 在IF单元最后（本周期末）更新IF_Stall
     temp_modified_mips_status = previous_mips_status
-
+    global SCOREBOARD_STATUS
     # 若IF单元Stall，本周期不提取任何指令
     if previous_mips_status['IF_Stall']:
         # 检查[Waiting Instruction]中原来不可用的寄存器是否已经可用
@@ -449,7 +457,7 @@ def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元�
         op = instruction_waiting.split()[0]
         if op == 'JR':
             rs_index = int(instruction_waiting.split()[1][1:])
-            if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
                 target_address = previous_mips_status['Registers'][rs_index]
                 temp_modified_mips_status['IF_Waiting'] = ""
                 temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # JR执行
@@ -460,8 +468,8 @@ def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元�
             rt_index = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
             offset = int(instruction_waiting[4:].replace(" ", "").split(',')[2][1:])
             target_address = previous_mips_status['PC'] + offset
-            if previous_scoreboard['Regs_Result_Status'][rs_index] == '' and \
-                    previous_scoreboard['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
+                    SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
                 temp_modified_mips_status['IF_Waiting'] = ""
                 temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BEQ执行
                 temp_modified_mips_status['IF_Stall'] = False  # 不再提取其他指令
@@ -474,7 +482,7 @@ def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元�
             rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
             offset = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
             target_address = previous_mips_status['PC'] + offset
-            if previous_scoreboard['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
                 temp_modified_mips_status['IF_Waiting'] = ""
                 temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BGTZ/BLTZ执行
                 temp_modified_mips_status['IF_Stall'] = False  # 不再提取其他指令
@@ -495,45 +503,276 @@ def if_operation(previous_scoreboard, previous_mips_status):  # IF功能单元�
     # 若本周期可以提取1条指令
     elif len(previous_mips_status['Pre_Issue']) == 3:
         instruction_fetched = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
-        temp_modified_mips_status = if_instruction_operation(instruction_fetched, previous_scoreboard,
-                                                             previous_mips_status, temp_modified_mips_status)
+        temp_modified_mips_status = fetch_one_instruction(instruction_fetched, previous_mips_status,
+                                                          temp_modified_mips_status)
 
     # 若本周期可以提取2条指令
     elif len(previous_mips_status['Pre_Issue']) <= 2:
         instruction_fetched_1 = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
         op1 = instruction_fetched_1.split()[0]
         if op1 in ['J', 'JR', 'BEQ', 'BLTZ', 'BGTZ', 'BREAK']:  # 不再取instruction_fetched_2
-            temp_modified_mips_status = if_instruction_operation(instruction_fetched_1, previous_scoreboard,
-                                                                 previous_mips_status, temp_modified_mips_status)
-            return temp_modified_mips_status
-        else:
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
+                                                              temp_modified_mips_status)
+        else:  # 再取第二条指令
             instruction_fetched_2 = INSTRUCTION_SEQUENCE[previous_mips_status['PC'] + 4]  # 没有分支，所以PC=PC+4
-            temp_modified_mips_status = if_instruction_operation(instruction_fetched_1, previous_scoreboard,
-                                                                 previous_mips_status, temp_modified_mips_status)
-            temp_modified_mips_status = if_instruction_operation(instruction_fetched_2, previous_scoreboard,
-                                                                 previous_mips_status, temp_modified_mips_status)
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
+                                                              temp_modified_mips_status)
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_2, previous_mips_status,
+                                                              temp_modified_mips_status)
     return temp_modified_mips_status
 
 
-def issue_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # Issue功能单元在每个周期的操作
+def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写的寄存器序号集合
+    read_regs_set = set()
+    write_regs_set = set()
+    op = instruction.split()[0]
+    if op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        read_regs_set.add(rt_index)
+        write_regs_set.add(rd_index)
+    elif op in ['ADD', 'SUB', 'MUL', 'AND', 'OR', 'XOR', 'NOR', 'SLT']:  # rd ← rs × rt
+        rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        read_regs_set.add(rt_index)
+        read_regs_set.add(rs_index)
+        write_regs_set.add(rd_index)
+    elif op in ['ADDI', 'ANDI', 'ORI', 'XORI']:  # rt ← rs + immediate
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        read_regs_set.add(rs_index)
+        write_regs_set.add(rt_index)
+    elif op == 'SW':   # SW rt, offset(base) [memory[base+offset] ← rt]
+        rt_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
+        left_parenthesis_index = int(instruction[3:].replace(" ", "").index('('))
+        base_index = int(instruction[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
+        read_regs_set.add(rt_index)
+        read_regs_set.add(base_index)
+    elif op == 'LW':  # LW rt, offset(base) [rt ← memory[base+offset]]
+        rt_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
+        left_parenthesis_index = int(instruction[3:].replace(" ", "").index('('))
+        base_index = int(instruction[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
+        write_regs_set.add(rt_index)
+        read_regs_set.add(base_index)
+    return read_regs_set, write_regs_set
+
+
+# 判断pre-issue中的某一条指令是否可以发射，只判断WAR，RAW，WAW相关，不判断其他条件（输入的指令格式为：" [instruction]"）
+def judge_issue(current_instruction, current_index_in_list, previous_mips_status):
+    # instruction_index_in_list是当前指令在pre-issue单元中的序号
+    global SCOREBOARD_STATUS
+    all_early_read_regs_set = set()  # 所有pre-issue中在该指令前的指令要读的寄存器
+    all_early_write_regs_set = set()  # 所有pre-issue中在该指令前的指令要写的寄存器
+    current_read_regs_set, current_write_regs_set = extract_regs(current_instruction)
+    for i in range(current_index_in_list):
+        early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
+        early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
+        all_early_read_regs_set.union(early_read_regs_set)
+        all_early_write_regs_set.union(early_write_regs_set)
+    # 检查该指令与Pre-issue单元中在它前面的指令之间的相关性
+    # Pre-issue队列中在它前面的指令不和它写同一个寄存器
+    for reg_index in current_write_regs_set:
+        if reg_index in all_early_write_regs_set:
+            return False
+    # Pre-issue队列中在它前面的指令不写它要读的寄存器
+    for reg_index in current_read_regs_set:
+        if reg_index in all_early_write_regs_set:
+            return False
+    # Pre-issue队列中没有指令要读它要写的寄存器
+    for reg_index in current_write_regs_set:
+        if reg_index in early_read_regs_set:
+            return False
+    # 检查该指令与已经发射（但未结束）的指令之间的相关性
+    # 没有已经发射（但未结束）的指令与它写同一个寄存器
+    for reg_index in current_write_regs_set:
+        if SCOREBOARD_STATUS['Regs_Result_Status'][reg_index] != '':
+            return False
+    # 没有已经发射（但未结束）的指令写它要读的寄存器
+    for reg_index in current_read_regs_set:
+        if SCOREBOARD_STATUS['Regs_Result_Status'][reg_index] != '':
+            return False
+    # 没有已经发射（但未结束）的指令要读它要写的寄存器
+    for reg_index in current_write_regs_set:
+        if SCOREBOARD_STATUS['Regs_Operand_Status'][reg_index] != '':
+            return False
+    return True
+
+
+def issue_one_instruction(instruction, instruction_index, previous_modified_mips_status):  # 发射某一条指令
+    global SCOREBOARD_STATUS
+    temp_modified_mips_status = previous_modified_mips_status
+    op = instruction.split()[0]
+    # 修改SCOREBOARD_STATUS中的Operand表和Result表
+    current_read_regs_set, current_write_regs_set = extract_regs(instruction)
+    for reg_index in current_read_regs_set:
+        SCOREBOARD_STATUS['Regs_Operand_Status'][reg_index] = instruction
+    for reg_index in current_write_regs_set:
+        SCOREBOARD_STATUS['Regs_Result_Status'][reg_index] = instruction
+    if op in ['SW', 'LW']:  # 走ALU1
+        del temp_modified_mips_status['Pre_Issue'][instruction_index]
+        temp_modified_mips_status['Pre_ALU1'].append(' [' + instruction + ']')
+    else:    # 走ALU2 立即数
+        del temp_modified_mips_status['Pre_Issue'][instruction_index]
+        temp_modified_mips_status['Pre_ALU2'].append(' [' + instruction + ']')
+    return temp_modified_mips_status
+
+
+def issue_operation(previous_mips_status, previous_modified_mips_status):  # Issue功能单元在每个周期的操作
+    global SCOREBOARD_STATUS
+    ls_issued = False  # 是否已经发射过一条LS类指令
+    non_ls_issued = False  # 是否已经发射过一条非LS类指令
+    temp_modified_mips_status = previous_modified_mips_status
+    # 在判断是否可以issue之前必须前清空SCOREBOARD中已经取完操作数的指令在Operand表中的表项
+    if len(previous_mips_status['Pre_ALU1']) >= 1:
+        excuted_alu1_instruction = previous_mips_status['Pre_ALU1'][0][2:-1]
+        excuted_read_regs_set, excuted_write_regs_set = extract_regs(excuted_alu1_instruction)
+        for reg in excuted_read_regs_set:
+            SCOREBOARD_STATUS['Regs_Operand_Status'][reg] = ''
+    if len(previous_mips_status['Pre_ALU2']) >= 1:
+        excuted_alu2_instruction = previous_mips_status['Pre_ALU2'][0][2:-1]
+        excuted_read_regs_set, excuted_write_regs_set = extract_regs(excuted_alu2_instruction)
+        for reg in excuted_read_regs_set:
+            SCOREBOARD_STATUS['Regs_Operand_Status'][reg] = ''
+    # 按序判断Pre-issue单元中的指令是否可以发射
+    pre_issue_count = len(previous_mips_status['Pre_Issue'])
+    if pre_issue_count == 0:  # 没有要发射的指令，直接返回
+        pass
+    else:
+        for index, instruction_in_list in enumerate(previous_mips_status['Pre_Issue']):
+            current_instruction = instruction_in_list[2:-1]  # 当前要判断的指令
+            current_op = current_instruction.split()[0]
+            if judge_issue(current_instruction, index, previous_mips_status):  # 若该条指令与活动指令没有WAR，WAW，RAW相关
+                if current_op == 'LW':  # 若想要发射的是LW指令
+                    # 在这里有检查Pre-ALU1是否有空位的必要吗？ —— 有必要！
+                    if len(previous_mips_status['Pre_ALU1']) == 2:  # 若Pre-ALU1没有空位
+                        continue  # 不发射这一条
+                    elif ls_issued:  # 若本周期之前已经发射过一条LS类指令
+                        continue  # 不发射这一条
+                    else:
+                        # 检查LW指令前是否有未发射的Store指令
+                        have_store_previous = False
+                        for pre_index in range(index):
+                            pre_instruction = previous_mips_status['Pre_Issue'][pre_index]
+                            pre_op = pre_instruction[2:-1].split()[0]
+                            if pre_op == 'SW':
+                                have_store_previous = True
+                        if have_store_previous:
+                            continue
+                        else:  # 检查到这里才可以发射这条LW指令
+                            temp_modified_mips_status = issue_one_instruction(current_instruction, index,
+                                                                              temp_modified_mips_status)
+                            ls_issued = True
+                elif current_op == 'SW':  # 若想要发射的是SW指令
+                    if len(previous_mips_status['Pre_ALU1']) == 2:  # 若Pre-ALU1没有空位
+                        continue  # 不发射这一条
+                    elif ls_issued:  # 若本周期之前已经发射过一条LS类指令
+                        continue  # 不发射这一条
+                    else:
+                        # Store指令必须按序发射，检查SW指令前面是否有未发射的Store指令
+                        have_store_previous = False
+                        for pre_index in range(index):
+                            pre_instruction = previous_mips_status['Pre_Issue'][pre_index]
+                            pre_op = pre_instruction[2:-1].split()[0]
+                            if pre_op == 'SW':
+                                have_store_previous = True
+                        if have_store_previous:
+                            continue
+                        else:  # 检查到这里才可以发射这条SW指令
+                            temp_modified_mips_status = issue_one_instruction(current_instruction, index,
+                                                                              temp_modified_mips_status)
+                            ls_issued = True
+                else:  # 若想要发射的是其他计算指令
+                    if len(previous_mips_status['Pre_ALU2']) == 2:  # 若Pre-ALU2没有空位
+                        continue  # 不发射这一条
+                    elif non_ls_issued:  # 若之前一条发射过一条非LS类指令
+                        continue  # 不发射这一条
+                    else:  # 发射
+                        temp_modified_mips_status = issue_one_instruction(current_instruction, index,
+                                                                          temp_modified_mips_status)
+                        non_ls_issued = True
+    return temp_modified_mips_status
+
+
+def alu1_operation(previous_mips_status, previous_modified_mips_status):  # ALU1功能单元在每个周期的操作
+    # ALU1 handles the calculation of address for memory (LW and SW) instructions.
+    # The instruction and its result will be written into the Pre-MEM buffer at the end of the current cycle.
+    temp_modified_mips_status = previous_modified_mips_status
+    if len(previous_mips_status['Pre_ALU1']) == 0:  # 若pre-alu1中没有等待执行的指令
+        pass
+    else:  # 从pre-alu1队列中取一条执行
+        instruction_executed = previous_mips_status['Pre_ALU1'][0][2:-1]
+        # 从Pre-ALU1队列中删除它
+        del temp_modified_mips_status['Pre_ALU1'][0]
+        op = instruction_executed.split()[0]
+        if op == 'LW':  # LW: IF, Issue, ALU1, MEM, WB;
+            target_regs = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])  # 写目标寄存器
+            comma_index = int(instruction_executed[3:].replace(" ", "").index(','))
+            left_parenthesis_index = int(instruction_executed[3:].replace(" ", "").index('('))
+            offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
+            base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
+            # LW rt, offset(base) [rt ← memory[base+offset]]
+            target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]   # 读目标地址
+            # 将状态信息写入下一级流水线单元
+            temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
+            temp_modified_mips_status['Pre_MEM_target_reg'] = target_regs
+        else:  # SW: IF, Issue, ALU1, MEM;
+            target_regs = int(instruction_executed[3:].replace(" ", "").split(',')[0][1:])  # 写目标寄存器
+            comma_index = int(instruction_executed[3:].replace(" ", "").index(','))
+            left_parenthesis_index = int(instruction_executed[3:].replace(" ", "").index('('))
+            offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
+            base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
+            # SW rt, offset(base) [memory[base+offset] ← rt]
+            target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]  # 写目标地址
+            # 将状态信息写入下一级流水线单元
+            temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
+            temp_modified_mips_status['Pre_MEM_target_reg'] = target_regs
+    return temp_modified_mips_status
+
+
+def alu2_operation(previous_mips_status, previous_modified_mips_status):  # ALU2功能单元在每个周期的操作
+    # ALU2 handles the calculation of all non-memory instructions.
+    # The instruction and its result will be written into the Post-ALU2 buffer at the end of the current cycle.
+    temp_modified_mips_status = previous_modified_mips_status
+    if len(previous_mips_status['Pre_ALU2']) == 0:  # 若pre-alu2中没有等待执行的指令
+        pass
+    else:
+        instruction_executed = previous_mips_status['Pre_ALU2'][0][2:-1]
+        # 从Pre-ALU2队列中删除它
+        del temp_modified_mips_status['Pre_ALU2'][0]
+        op = instruction_executed.split()[0]
+        # 分类执行这条指令
+
+
+    return temp_modified_mips_status
+
+
+def mem_operation(previous_mips_status, previous_modified_mips_status):  # MEM功能单元在每个周期的操作
     pass
 
 
-def alu1_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # ALU1功能单元在每个周期的操作
+def wb_operation(previous_mips_status, previous_modified_mips_status):  # WB功能单元在每个周期的操作
+    # 若有指令要WB，需要在SCOREBOARD的Result表中删除对应项
+
     pass
 
 
-def alu2_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # ALU2功能单元在每个周期的操作
-    pass
-
-
-def mem_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # MEM功能单元在每个周期的操作
-    pass
-
-
-def wb_operation(previous_scoreboard, modified_scoreboard, previous_mips_status, modified_mips_status):  # WB功能单元在每个周期的操作
-    pass
-
+def run_simulation(start_mips_status):  # 开始模拟
+    previous_mips_status = start_mips_status  # previous_mips_status是上一个周期结束的状态
+    temp_mips_status = start_mips_status  # temp_mips_status是这个周期中被各个功能单元改变的状态
+    while not temp_mips_status['END']:
+        # 一个Cycle开始
+        temp_mips_status['CycleNumber'] = temp_mips_status['CycleNumber'] + 1
+        temp_mips_status = fetch_operation(previous_mips_status)  # IF单元操作
+        temp_mips_status = issue_operation(previous_mips_status, temp_mips_status)  # ISSUE单元操作
+        temp_mips_status = alu1_operation(previous_mips_status, temp_mips_status)  # ALU1单元操作
+        temp_mips_status = alu2_operation(previous_mips_status, temp_mips_status)  # ALU1单元操作
+        temp_mips_status = mem_operation(previous_mips_status, temp_mips_status)  # MEM单元操作
+        temp_mips_status = wb_operation(previous_mips_status, temp_mips_status)  # WB单元操作
+        # 一个Cycle结束，打印这个Cycle结束时的状态
+        print_cycle_status(temp_mips_status, 'simulation.txt')
+        previous_mips_status = temp_mips_status  # 更新上一个周期的状态
 
 
 if __name__ == '__main__':
@@ -552,4 +791,4 @@ if __name__ == '__main__':
     p = open('simulation.txt', 'w')
     p.truncate()
     p.close()
-    print_cycle_status(MIPS_STATUS, 'simulation.txt')
+    run_simulation(MIPS_STATUS)
