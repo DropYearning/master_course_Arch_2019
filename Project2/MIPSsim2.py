@@ -421,7 +421,7 @@ def fetch_one_instruction(instruction, previous_mips_status, previous_modified_m
         temp_modified_mips_status['END'] = True
         if mode == 'debug':
             print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
-        # BREAK指令不改变PC（改了也没有意义）
+        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
     elif op == "NOP":  # 若提取到的是NOP指令
         temp_modified_mips_status['IF_Executed'] = ' [NOP]'  # 立即执行NOP
         # no operation
@@ -452,7 +452,7 @@ def fetch_one_instruction(instruction, previous_mips_status, previous_modified_m
         rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-        target_address = temp_modified_mips_status['PC'] + offset + 4
+        target_address = temp_modified_mips_status['PC'] + offset + 4  # 直接取到，PC需要+4
         if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
                 SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
             temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BEQ立即执行
@@ -481,7 +481,7 @@ def fetch_one_instruction(instruction, previous_mips_status, previous_modified_m
     elif op in ['BLTZ', 'BGTZ']:  # 若提取到的是BGTZ或者BLTZ指令 , BLTZ rs, offset [if rs < 0 then branch]
         rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        target_address = temp_modified_mips_status['PC'] + offset + 4
+        target_address = temp_modified_mips_status['PC'] + offset + 4 # 直接取到，PC需要+4
         if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
             temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BGTZ/BLTZ立即执行
             if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
@@ -562,7 +562,7 @@ def fetch_operation(previous_mips_status, previous_modified_mips_status, mode): 
             rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
             rt_index = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
             offset = int(instruction_waiting[4:].replace(" ", "").split(',')[2][1:])
-            target_address = temp_modified_mips_status['PC'] + offset + 4
+            target_address = temp_modified_mips_status['PC'] + offset
             if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
                     SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
                 temp_modified_mips_status['IF_Waiting'] = ""
@@ -589,7 +589,7 @@ def fetch_operation(previous_mips_status, previous_modified_mips_status, mode): 
         elif op in ['BLTZ', 'BGTZ']:
             rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
             offset = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
-            target_address = temp_modified_mips_status['PC'] + offset + 4
+            target_address = temp_modified_mips_status['PC'] + offset
             if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
                 temp_modified_mips_status['IF_Waiting'] = ""
                 temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BGTZ/BLTZ执行
@@ -629,6 +629,8 @@ def fetch_operation(previous_mips_status, previous_modified_mips_status, mode): 
 
     # 若本周期可以提取1条指令
     elif len(previous_mips_status['Pre_Issue']) == 3:
+        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
+        #     return temp_modified_mips_status
         instruction_fetched = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
         if mode == 'debug':
             print('Fetch Unit:' + "Pre-issue只有1个空位，本周期只能提取1条指令")
@@ -637,6 +639,8 @@ def fetch_operation(previous_mips_status, previous_modified_mips_status, mode): 
         # 更新PC操作包含在 fetch_one_instruction（）函数中
     # 若本周期可以提取2条指令
     elif len(previous_mips_status['Pre_Issue']) <= 2:
+        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
+        #     return temp_modified_mips_status
         instruction_fetched_1 = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
         op1 = instruction_fetched_1.split()[0]
         if op1 in ['J', 'JR', 'BEQ', 'BLTZ', 'BGTZ', 'BREAK']:  # 不再取instruction_fetched_2
@@ -716,7 +720,7 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
             return False
     # Pre-issue队列中没有指令要读它要写的寄存器
     for reg_index in current_write_regs_set:
-        if reg_index in all_early_write_regs_set:
+        if reg_index in all_early_read_regs_set:
             return False
     # 检查该指令与已经发射（但未结束）的指令之间的相关性
     # 没有已经发射（但未结束）的指令与它写同一个寄存器
@@ -884,7 +888,7 @@ def alu1_operation(previous_mips_status, previous_modified_mips_status, mode):  
             offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
             base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
             # LW rt, offset(base) [rt ← memory[base+offset]]
-            target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]   # 读目标地址
+            target_adress = offset + previous_mips_status['Registers'][base]   # 读目标地址
             # 将状态信息写入下一级流水线buffer
             temp_modified_mips_status['Pre_MEM'] = ' [' + instruction_executed + ']'
             temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
@@ -895,7 +899,7 @@ def alu1_operation(previous_mips_status, previous_modified_mips_status, mode):  
             offset = int(instruction_executed[3:].replace(" ", "")[comma_index + 1:left_parenthesis_index])
             base = int(instruction_executed[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
             # SW rt, offset(base) [memory[base+offset] ← rt]
-            target_adress = previous_mips_status['Data'][offset + previous_mips_status['Registers'][base]]  # 写目标地址
+            target_adress = offset + previous_mips_status['Registers'][base]  # 写目标地址
             # 将状态信息写入下一级流水线buffer
             temp_modified_mips_status['Pre_MEM'] = ' [' + instruction_executed + ']'
             temp_modified_mips_status['Pre_MEM_target_address'] = target_adress
@@ -904,8 +908,8 @@ def alu1_operation(previous_mips_status, previous_modified_mips_status, mode):  
             print("ALU1 Unit: 执行指令并添加到Pre-MEM【" + instruction_executed + '】',
                   'Pre_ALU1: ', temp_modified_mips_status['Pre_ALU1'], '\t',
                   'Pre_MEM: ' + temp_modified_mips_status['Pre_MEM'], '\t',
-                  'Pre_MEM_target_address: ' + int(temp_modified_mips_status['Pre_MEM_target_address']), '\t',
-                  'Pre_MEM_value: ' + int(temp_modified_mips_status['Pre_MEM_value']))
+                  'Pre_MEM_target_address: ' + str(temp_modified_mips_status['Pre_MEM_target_address']), '\t',
+                  'Pre_MEM_value: ' + str(temp_modified_mips_status['Pre_MEM_value']))
     return temp_modified_mips_status
 
 
@@ -1047,19 +1051,20 @@ def mem_operation(previous_mips_status, previous_modified_mips_status, mode):  #
         temp_modified_mips_status['Post_MEM'] = ''
         temp_modified_mips_status['Post_MEM_value'] = None
     else:
-        instruction_executed = previous_mips_status['Pre_MEM'][0][2:-1]
+        instruction_executed = previous_mips_status['Pre_MEM'][2:-1]
         op = instruction_executed.split()[0]
         # 这里不用清空Pre-MEM，在alu1_operation中已经清空过
         value = previous_mips_status['Pre_MEM_value']
         target_address = previous_mips_status['Pre_MEM_target_address']
         if op == 'LW':  # 读存储器
+            print(target_address)
             fetched_value = previous_mips_status['Data'][target_address]
             temp_modified_mips_status['Post_MEM'] = ' [' + instruction_executed + ']'
             temp_modified_mips_status['Post_MEM_value'] = fetched_value
             if mode == 'debug':
                 print("MEM Unit: 执行Load指令并添加到Post-MEM【" + instruction_executed + '】',
                       'Post_MEM: ' + temp_modified_mips_status['Post_MEM'],
-                      'Post_MEM_value: ' + temp_modified_mips_status['Post_MEM_value'])
+                      'Post_MEM_value: ' , temp_modified_mips_status['Post_MEM_value'])
         else:  # 写存储器
             temp_modified_mips_status['Data'][target_address] = value
             temp_modified_mips_status['Post_MEM'] = ''
@@ -1067,7 +1072,7 @@ def mem_operation(previous_mips_status, previous_modified_mips_status, mode):  #
             if mode == 'debug':
                 print("MEM Unit: 执行Store指令并添加到Post-MEM【" + instruction_executed + '】',
                       'Post_MEM: ' + temp_modified_mips_status['Post_MEM'],
-                      'Post_MEM_value: ' + temp_modified_mips_status['Post_MEM_value'])
+                      'Post_MEM_value: ', temp_modified_mips_status['Post_MEM_value'])
     return temp_modified_mips_status
 
 

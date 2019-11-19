@@ -15,7 +15,7 @@ MIPS_STATUS = {
     "IF_Waiting": "",  # 使IF单元stall的分支指令
     "IF_Executed": "",
     # 下面是一些流水线buffer, 为保证冒号后不多空格，存储的指令格式为" [instruction]"
-    'Pre_Issue': [' [LW R3, 300(R16)]', ' [LW R4, 320(R16)]', ' [ADD R5, R3, R4]'],  # 4 entry at most
+    'Pre_Issue': [' [SW R5, 340(R16)]', ' [SLL R16, R1, #2]', ' [LW R3, 300(R16)]', ' [LW R4, 320(R16)]' ],  # 4 entry at most
     'Pre_ALU1': [],  # 2 entry at most
     'Pre_ALU2': [],  # 2 entry at most
     'Pre_MEM': "",  # 1 entry
@@ -79,11 +79,11 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
     all_early_read_regs_set = set('')  # 所有pre-issue中在该指令前的指令要读的寄存器
     all_early_write_regs_set = set('')  # 所有pre-issue中在该指令前的指令要写的寄存器
     current_read_regs_set, current_write_regs_set = extract_regs(current_instruction)
+    print('当前要发射的指令', current_instruction, "要读的寄存器为", current_read_regs_set, '要写的寄存器为', current_write_regs_set)
     for i in range(current_index_in_list):
-        print('检查Pre-issue' + str(i) + '中的指令' + previous_mips_status['Pre_Issue'][i][2:-1])
+        print('检查Pre-issue ' + str(i) + '中的指令' + previous_mips_status['Pre_Issue'][i][2:-1])
         early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
         early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
-        print('从指令', early_instruction, "中抽取出要读的寄存器为", early_read_regs_set, '要写的寄存器为', early_write_regs_set)
         all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
         all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
         print('合并指令', early_instruction, "后所有要读的寄存器为", all_early_read_regs_set, '要写的寄存器为', all_early_write_regs_set)
@@ -98,7 +98,7 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
             return False
     # Pre-issue队列中没有指令要读它要写的寄存器
     for reg_index in current_write_regs_set:
-        if reg_index in all_early_write_regs_set:
+        if reg_index in all_early_read_regs_set:
             return False
     # 检查该指令与已经发射（但未结束）的指令之间的相关性
     # 没有已经发射（但未结束）的指令与它写同一个寄存器
@@ -116,4 +116,4 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
     return True
 
 
-print(judge_issue('ADD R5, R3, R4', 2, MIPS_STATUS, mode='debug'))
+print(judge_issue('SLL R16, R1, #2', 1, MIPS_STATUS, mode='debug'))
