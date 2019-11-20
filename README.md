@@ -4,3 +4,6 @@ teacher : CMS
 
 ## project1
 简单32位MIPS反汇编器和模拟器的实现
+
+## project2
+通过~~伪计分卡算法~~实现简单MIPS流水线
