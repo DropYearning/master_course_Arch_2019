@@ -4,6 +4,8 @@
 # @File    : test.py
 # @Software: PyCharm
 
+import sys
+
 MIPS_STATUS = {
     'CycleNumber': 0,  # 当前执行指令的周期数
     'PC': 256,  # 程序计数器
@@ -115,5 +117,6 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
             return False
     return True
 
-
-print(judge_issue('SLL R16, R1, #2', 1, MIPS_STATUS, mode='debug'))
+if __name__ == '__main__':
+    print(len(sys.argv))
+    print(sys.argv[0])

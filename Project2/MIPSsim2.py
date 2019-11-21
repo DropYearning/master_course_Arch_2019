@@ -1101,15 +1101,26 @@ def run_simulation(start_mips_status, mode='simulation'):  # 开始模拟
 
 
 if __name__ == '__main__':
-    # 默认sys.argv[1]为输入的文件名
-    # INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt', START_ADDRESS)
-    # MIPS_STATUS['Data'] = disassembler_memory(sys.argv[1], 'disassembly.txt', INSTRUCTION_COUNT)
-
-    # 文件名写死
-    INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt', START_ADDRESS)
-    MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', INSTRUCTION_COUNT)
     # 先清空文件simulation.txt
     p = open('simulation.txt', 'w')
     p.truncate()
     p.close()
-    run_simulation(MIPS_STATUS)
+    # 默认sys.argv[1]为输入的文件名
+    if len(sys.argv) == 1:
+        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample.txt', 'disassembly.txt',
+                                                                           START_ADDRESS)
+        MIPS_STATUS['Data'] = disassembler_memory('sample.txt', 'disassembly.txt', INSTRUCTION_COUNT)
+        run_simulation(MIPS_STATUS)
+    elif len(sys.argv) == 2:
+        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt',
+                                                                           START_ADDRESS)
+        MIPS_STATUS['Data'] = disassembler_memory(sys.argv[1], 'disassembly.txt', INSTRUCTION_COUNT)
+        run_simulation(MIPS_STATUS)
+    elif len(sys.argv) == 3:
+        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt',
+                                                                           START_ADDRESS)
+        MIPS_STATUS['Data'] = disassembler_memory(sys.argv[1], 'disassembly.txt', INSTRUCTION_COUNT)
+        run_simulation(MIPS_STATUS, sys.argv[2])
+
+
+
