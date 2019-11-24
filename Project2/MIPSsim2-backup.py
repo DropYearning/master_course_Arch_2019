@@ -397,37 +397,271 @@ def print_scoreboard(output_file_name):
         else:
             output_file_pointer.write(str(i) + ":[" + SCOREBOARD_STATUS['Regs_Operand_Status'][i] + ']' + '\t')
 
+
+def fetch_one_instruction(instruction, previous_mips_status, previous_modified_mips_status,
+                          mode=''):  # 每种指令在IF单元需要进行的操作
+    temp_modified_mips_status = previous_modified_mips_status
+    global SCOREBOARD_STATUS
+    op = instruction.split()[0]
+    if op == 'BREAK':  # 若提取到的是BREAK指令
+        temp_modified_mips_status['IF_Executed'] = ' [BREAK]'  # 立即执行BREAK
+        temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+        temp_modified_mips_status['END'] = True
+        if mode == 'debug':
+            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
+        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
+    elif op == "NOP":  # 若提取到的是NOP指令
+        temp_modified_mips_status['IF_Executed'] = ' [NOP]'  # 立即执行NOP
+        # no operation
+        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
+        if mode == 'debug':
+            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
+    elif op == 'J':  # 若提取到的是J指令(一定立即发生跳转)
+        target_address = int(instruction.split()[1][1:])
+        temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # 立即执行J
+        temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+        if mode == 'debug':
+            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
+    elif op == 'JR':  # 若提取到的是JR指令
+        rs_index = int(instruction.split()[1][1:])
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            target_address = previous_mips_status['Registers'][rs_index]
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # JR立即执行
+            temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+            if mode == 'debug':
+                print('Fetch Unit:' + "提取到JR指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" + str(
+                    temp_modified_mips_status['PC']))
+        else:  # rs没有准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # JR进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
+            if mode == 'debug':
+                print('Fetch Unit:' + "提取到JR指令【" + instruction + "】，跳转未执行，" + "提取后PC更新为:" + str(
+                    temp_modified_mips_status['PC']))
+    elif op == 'BEQ':  # 若提取到的是BEQ指令
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
+        target_address = temp_modified_mips_status['PC'] + offset + 4  # 直接取到，PC需要+4
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
+                SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BEQ立即执行
+            if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
+                # rs == rt 才跳转
+                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" + str(
+                            temp_modified_mips_status[
+                                'PC']))
+            else:  # 否则PC正常+4
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，不符合条件跳转未执行，" + "提取后PC更新为:" + str(
+                            temp_modified_mips_status[
+                                'PC']))
+                temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
+        else:  # rs和rt没准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # BEQ进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
+            if mode == 'debug':
+                print(
+                    'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，寄存器没准备好跳转未执行，" + "提取后PC更新为:" +
+                    str(temp_modified_mips_status[
+                            'PC']))
+    elif op in ['BLTZ', 'BGTZ']:  # 若提取到的是BGTZ或者BLTZ指令 , BLTZ rs, offset [if rs < 0 then branch]
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        target_address = temp_modified_mips_status['PC'] + offset + 4  # 直接取到，PC需要+4
+        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
+            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BGTZ/BLTZ立即执行
+            if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
+                temp_modified_mips_status['PC'] = target_address  # 修改PC
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "提取到BLTZ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" +
+                        str(temp_modified_mips_status[
+                                'PC']))
+            elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
+                temp_modified_mips_status['PC'] = target_address  # 修改PC
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "提取到BGTZ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" +
+                        str(temp_modified_mips_status[
+                                'PC']))
+            else:  # 否则PC正常+4
+                temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "提取到指令【" + instruction + "】，不符合条件跳转未执行，" + "提取后PC更新为:" +
+                        str(temp_modified_mips_status[
+                                'PC']))
+        else:  # rs没准备好
+            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # 指令进入等待状态
+            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
+            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
+            if mode == 'debug':
+                print(
+                    'Fetch Unit:' + "提取到指令【" + instruction + "】，寄存器没准备好跳转未执行，" + "提取后PC更新为:" +
+                    str(temp_modified_mips_status[
+                            'PC']))
+    else:  # 若提取到的是其他指令(SW,LW,运算指令等) 【这些指令会进入Pre-issue中，需要更改pre-issue的空位数】
+        # IF单元不检查这些指令的操作数是否准备完毕，只要有空位就进入Pre-issue，最后要更改PC+4
+        # 检查空位的操作在前面已经做过，这里直接append
+        temp_modified_mips_status['Pre_Issue'].append(' [' + instruction + ']')  # 写入pre-issue
+        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
+        if mode == 'debug':
+            print(
+                'Fetch Unit:' + "提取到指令【" + instruction + "】，非跳转指令，" + "提取后PC更新为:" +
+                str(temp_modified_mips_status[
+                        'PC']))
+    return temp_modified_mips_status
+
+
+def fetch_operation(previous_mips_status, previous_modified_mips_status, mode):  # IF功能单元在每个周期的操作
+    # IF单元承担改变PC的任务
+    temp_modified_mips_status = previous_modified_mips_status
+    global SCOREBOARD_STATUS
+    # 清空上一周期遗留下的IF_Executed
+    if previous_mips_status['IF_Executed'] != '':
+        temp_modified_mips_status['IF_Executed'] = ''
+    # 若IF单元Stall，本周期不提取任何指令
+    if previous_mips_status['IF_Stall']:
+        # 检查[Waiting Instruction]中原来不可用的寄存器是否已经可用
+        instruction_waiting = previous_mips_status['IF_Waiting'][2:-1]
+        op = instruction_waiting.split()[0]
+        if op == 'JR':
+            rs_index = int(instruction_waiting.split()[1][1:])
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
+                target_address = previous_mips_status['Registers'][rs_index]
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # JR执行
+                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+                temp_modified_mips_status['IF_Stall'] = False  # 下个周期可以提取指令
+                if mode == 'debug':
+                    print(
+                        'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，跳转执行，" + "PC更新为:" +
+                        str(temp_modified_mips_status[
+                                'PC']))
+            else:
+                if mode == 'debug':
+                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
+        elif op == 'BEQ':
+            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
+            rt_index = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
+            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[2][1:])
+            target_address = temp_modified_mips_status['PC'] + offset
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
+                    SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '':  # rs和rt准备好
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BEQ执行
+                temp_modified_mips_status['IF_Stall'] = False  # 下周期可以提取指令
+                if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
+                    # rs == rt 才跳转
+                    temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
+                    if mode == 'debug':
+                        print(
+                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
+                            str(temp_modified_mips_status[
+                                    'PC']))
+                else:  # 这里PC不用再+4，因为这条指令对应的+4在取这条指令执行fetch_ont_instruction的时候已经执行
+                    if mode == 'debug':
+                        print(
+                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，不符合条件跳转不执行，" + "PC为:" +
+                            str(temp_modified_mips_status[
+                                    'PC']))
+            else:
+                if mode == 'debug':
+                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
+
+        elif op in ['BLTZ', 'BGTZ']:
+            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
+            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
+            target_address = temp_modified_mips_status['PC'] + offset
+            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '':  # rs准备好
+                temp_modified_mips_status['IF_Waiting'] = ""
+                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BGTZ/BLTZ执行
+                temp_modified_mips_status['IF_Stall'] = False  # 下周期可以提取指令
+                if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
+                    temp_modified_mips_status['PC'] = target_address  # 修改PC
+                    if mode == 'debug':
+                        print(
+                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
+                            str(temp_modified_mips_status[
+                                    'PC']))
+                elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
+                    temp_modified_mips_status['PC'] = target_address  # 修改PC
+                    if mode == 'debug':
+                        print(
+                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
+                            str(temp_modified_mips_status[
+                                    'PC']))
+                else:  # 这里PC不用再+4，因为这条指令对应的+4在取这条指令执行fetch_ont_instruction的时候已经执行
+                    if mode == 'debug':
+                        print(
+                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，不符合条件跳转不执行，" + "PC为:" +
+                            str(temp_modified_mips_status[
+                                    'PC']))
+            else:
+                if mode == 'debug':
+                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
+
+    # 若Pre-issue没有空位，本周期不提取任何指令
+    elif len(previous_mips_status['Pre_Issue']) == 4:
+        if mode == 'debug':
+            print('Fetch Unit:' + "Pre-issue没有空位，本周期不提取任何指令")
+        # If there is no empty slot in the Pre-issue buffer at the end of the last cycle,
+        # no instruction can be fetched at the current cycle.
+        # 此时PC不变
+        pass
+
+    # 若本周期可以提取1条指令
+    elif len(previous_mips_status['Pre_Issue']) == 3:
+        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
+        #     return temp_modified_mips_status
+        instruction_fetched = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
+        if mode == 'debug':
+            print('Fetch Unit:' + "Pre-issue只有1个空位，本周期只能提取1条指令")
+        temp_modified_mips_status = fetch_one_instruction(instruction_fetched, previous_mips_status,
+                                                          temp_modified_mips_status, mode)
+        # 更新PC操作包含在 fetch_one_instruction（）函数中
+    # 若本周期可以提取2条指令
+    elif len(previous_mips_status['Pre_Issue']) <= 2:
+        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
+        #     return temp_modified_mips_status
+        instruction_fetched_1 = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
+        op1 = instruction_fetched_1.split()[0]
+        if op1 in ['J', 'JR', 'BEQ', 'BLTZ', 'BGTZ', 'BREAK']:  # 不再取instruction_fetched_2
+            if mode == 'debug':
+                print('Fetch Unit:' + "Pre-issue空位足够，但提取到的第1条是分支指令")
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
+                                                              temp_modified_mips_status, mode)
+        else:  # 再取第二条指令
+            if mode == 'debug':
+                print('Fetch Unit:' + "Pre-issue空位足够，本周期可以提取2条指令")
+            instruction_fetched_2 = INSTRUCTION_SEQUENCE[previous_mips_status['PC'] + 4]
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
+                                                              temp_modified_mips_status, mode)
+            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_2, previous_mips_status,
+                                                              temp_modified_mips_status, mode)
+            # 更新PC操作包含在 fetch_one_instruction（）函数中
+    return temp_modified_mips_status
+
+
 def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写的寄存器序号集合
     read_regs_set = set('')
     write_regs_set = set('')
     op = instruction.split()[0]
-    if op == 'JR':   # J target
-        rs_index = int(instruction[4:])
-        read_regs_set.add(rs_index)
-    elif op =='BEQ':   # BEQ rs, rt, offset 【if rs = rt then branch】
-        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
-        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        read_regs_set.add(rs_index)
-        read_regs_set.add(rt_index)
-    elif op in ['BLTZ', 'BGTZ']:   # BLTZ rs, offset [if rs < 0 then branch]
-        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
-        read_regs_set.add(rs_index)
-    elif op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
+    if op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         read_regs_set.add(rt_index)
         write_regs_set.add(rd_index)
-    elif op in ['ADD', 'SUB', 'MUL', 'AND', 'XOR', 'NOR', 'SLT']:  # rd ← rs × rt
+    elif op in ['ADD', 'SUB', 'MUL', 'AND', 'OR', 'XOR', 'NOR', 'SLT']:  # rd ← rs × rt
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-        read_regs_set.add(rt_index)
-        read_regs_set.add(rs_index)
-        write_regs_set.add(rd_index)
-    elif op == 'OR':  # OR 操作符只有2位，单独判断
-        rd_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
-        rs_index = int(instruction[3:].replace(" ", "").split(',')[1][1:])
-        rt_index = int(instruction[3:].replace(" ", "").split(',')[2][1:])
         read_regs_set.add(rt_index)
         read_regs_set.add(rs_index)
         write_regs_set.add(rd_index)
@@ -451,26 +685,18 @@ def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写�
     return read_regs_set, write_regs_set
 
 
-# 判断pre-issue中的某一条指令是否可以发射，只判断是否存在WAR，RAW，WAW相关，不判断其他条件
+# 判断pre-issue中的某一条指令是否可以发射，只判断WAR，RAW，WAW相关，不判断其他条件（输入的指令格式为：" [instruction]"）
 def judge_issue(current_instruction, current_index_in_list, previous_mips_status, mode=''):
     # instruction_index_in_list是当前指令在pre-issue单元中的序号
     global SCOREBOARD_STATUS
     all_early_read_regs_set = set('')  # 所有pre-issue中在该指令前的指令要读的寄存器
     all_early_write_regs_set = set('')  # 所有pre-issue中在该指令前的指令要写的寄存器
     current_read_regs_set, current_write_regs_set = extract_regs(current_instruction)
-    op = current_instruction.split()[0]
-    if op in ['JR', 'BEQ', 'BLTZ', 'BGTZ']:  # 判断本周期提取到的一条需要访问寄存器的分支指令是否能执行
-        for ins in previous_mips_status['Pre_Issue']:
-            early_instruction = ins[2:-1]
-            early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
-            all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
-            all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
-    else:  # 判断pre-issue队列中的一条指令是否与活动指令有WAR，RAW，WAW相关
-        for i in range(current_index_in_list):
-            early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
-            early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
-            all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
-            all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
+    for i in range(current_index_in_list):
+        early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
+        early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
+        all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
+        all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
     # 检查该指令与Pre-issue单元中在它前面的指令之间的相关性
     # Pre-issue队列中在它前面的指令不和它写同一个寄存器
     for reg_index in current_write_regs_set:
@@ -624,263 +850,6 @@ def issue_operation(previous_mips_status, previous_modified_mips_status, mode): 
                         temp_modified_mips_status = issue_one_instruction(current_instruction, index,
                                                                           temp_modified_mips_status, mode)
                         non_ls_issued = True
-    return temp_modified_mips_status
-
-
-def fetch_one_instruction(instruction, previous_mips_status, previous_modified_mips_status,
-                          mode=''):  # 每种指令在IF单元需要进行的操作
-    temp_modified_mips_status = previous_modified_mips_status
-    global SCOREBOARD_STATUS
-    op = instruction.split()[0]
-    if op == 'BREAK':  # 若提取到的是BREAK指令
-        temp_modified_mips_status['IF_Executed'] = ' [BREAK]'  # 立即执行BREAK
-        temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
-        temp_modified_mips_status['END'] = True
-        if mode == 'debug':
-            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
-        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
-    elif op == "NOP":  # 若提取到的是NOP指令
-        temp_modified_mips_status['IF_Executed'] = ' [NOP]'  # 立即执行NOP
-        # no operation
-        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
-        if mode == 'debug':
-            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
-    elif op == 'J':  # 若提取到的是J指令(一定立即发生跳转)
-        target_address = int(instruction.split()[1][1:])
-        temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # 立即执行J
-        temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
-        if mode == 'debug':
-            print('Fetch Unit:' + "提取到【" + instruction + "】指令" + "提取后PC更新为:" + str(temp_modified_mips_status['PC']))
-    elif op == 'JR':  # 若提取到的是JR指令
-        rs_index = int(instruction.split()[1][1:])
-        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                judge_issue(instruction, None, previous_mips_status, mode):  # rs准备好
-            target_address = previous_mips_status['Registers'][rs_index]
-            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # JR立即执行
-            temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
-            if mode == 'debug':
-                print('Fetch Unit:' + "提取到JR指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" + str(
-                    temp_modified_mips_status['PC']))
-        else:  # rs没有准备好
-            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # JR进入等待状态
-            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
-            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
-            if mode == 'debug':
-                print('Fetch Unit:' + "提取到JR指令【" + instruction + "】，跳转未执行，" + "提取后PC更新为:" + str(
-                    temp_modified_mips_status['PC']))
-    elif op == 'BEQ':  # 若提取到的是BEQ指令
-        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
-        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        offset = int(instruction[4:].replace(" ", "").split(',')[2][1:])
-        target_address = temp_modified_mips_status['PC'] + offset + 4  # 直接取到，PC需要+4
-        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '' and \
-                judge_issue(instruction, None, previous_mips_status, mode):  # rs和rt准备好
-            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BEQ立即执行
-            if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
-                # rs == rt 才跳转
-                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" + str(
-                            temp_modified_mips_status[
-                                'PC']))
-            else:  # 否则PC正常+4
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，不符合条件跳转未执行，" + "提取后PC更新为:" + str(
-                            temp_modified_mips_status[
-                                'PC']))
-                temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
-        else:  # rs和rt没准备好
-            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # BEQ进入等待状态
-            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
-            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
-            if mode == 'debug':
-                print(
-                    'Fetch Unit:' + "提取到BEQ指令【" + instruction + "】，寄存器没准备好跳转未执行，" + "提取后PC更新为:" +
-                    str(temp_modified_mips_status[
-                            'PC']))
-    elif op in ['BLTZ', 'BGTZ']:  # 若提取到的是BGTZ或者BLTZ指令 , BLTZ rs, offset [if rs < 0 then branch]
-        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
-        offset = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        target_address = temp_modified_mips_status['PC'] + offset + 4  # 直接取到，PC需要+4
-        if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                judge_issue(instruction, None, previous_mips_status, mode):  # rs准备好
-            temp_modified_mips_status['IF_Executed'] = ' [' + instruction + ']'  # BGTZ/BLTZ立即执行
-            if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
-                temp_modified_mips_status['PC'] = target_address  # 修改PC
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "提取到BLTZ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" +
-                        str(temp_modified_mips_status[
-                                'PC']))
-            elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
-                temp_modified_mips_status['PC'] = target_address  # 修改PC
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "提取到BGTZ指令【" + instruction + "】，跳转执行，" + "提取后PC更新为:" +
-                        str(temp_modified_mips_status[
-                                'PC']))
-            else:  # 否则PC正常+4
-                temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "提取到指令【" + instruction + "】，不符合条件跳转未执行，" + "提取后PC更新为:" +
-                        str(temp_modified_mips_status[
-                                'PC']))
-        else:  # rs没准备好
-            temp_modified_mips_status['IF_Waiting'] = ' [' + instruction + ']'  # 指令进入等待状态
-            temp_modified_mips_status['IF_Stall'] = True  # 不再提取其他指令
-            temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # 虽然暂停取指，但是PC仍要+4
-            if mode == 'debug':
-                print(
-                    'Fetch Unit:' + "提取到指令【" + instruction + "】，寄存器没准备好跳转未执行，" + "提取后PC更新为:" +
-                    str(temp_modified_mips_status[
-                            'PC']))
-    else:  # 若提取到的是其他指令(SW,LW,运算指令等) 【这些指令会进入Pre-issue中，需要更改pre-issue的空位数】
-        # IF单元不检查这些指令的操作数是否准备完毕，只要有空位就进入Pre-issue，最后要更改PC+4
-        # 检查空位的操作在前面已经做过，这里直接append
-        temp_modified_mips_status['Pre_Issue'].append(' [' + instruction + ']')  # 写入pre-issue
-        temp_modified_mips_status['PC'] = temp_modified_mips_status['PC'] + 4  # PC = PC +4
-        if mode == 'debug':
-            print(
-                'Fetch Unit:' + "提取到指令【" + instruction + "】，非跳转指令，" + "提取后PC更新为:" +
-                str(temp_modified_mips_status[
-                        'PC']))
-    return temp_modified_mips_status
-
-
-def fetch_operation(previous_mips_status, previous_modified_mips_status, mode):  # IF功能单元在每个周期的操作
-    # IF单元承担改变PC的任务
-    temp_modified_mips_status = previous_modified_mips_status
-    global SCOREBOARD_STATUS
-    # 清空上一周期遗留下的IF_Executed
-    if previous_mips_status['IF_Executed'] != '':
-        temp_modified_mips_status['IF_Executed'] = ''
-    # 若IF单元Stall，本周期不提取任何指令
-    if previous_mips_status['IF_Stall']:
-        # 检查[Waiting Instruction]中原来不可用的寄存器是否已经可用
-        instruction_waiting = previous_mips_status['IF_Waiting'][2:-1]
-        op = instruction_waiting.split()[0]
-        if op == 'JR':
-            rs_index = int(instruction_waiting.split()[1][1:])
-            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                    judge_issue(instruction_waiting, None, previous_mips_status, mode):  # rs准备好
-                target_address = previous_mips_status['Registers'][rs_index]
-                temp_modified_mips_status['IF_Waiting'] = ""
-                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # JR执行
-                temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
-                temp_modified_mips_status['IF_Stall'] = False  # 下个周期可以提取指令
-                if mode == 'debug':
-                    print(
-                        'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，跳转执行，" + "PC更新为:" +
-                        str(temp_modified_mips_status[
-                                'PC']))
-            else:
-                if mode == 'debug':
-                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
-        elif op == 'BEQ':
-            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
-            rt_index = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
-            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[2][1:])
-            target_address = temp_modified_mips_status['PC'] + offset
-            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                    SCOREBOARD_STATUS['Regs_Result_Status'][rt_index] == '' and \
-                    judge_issue(instruction_waiting, None, previous_mips_status, mode):  # rs和rt准备好
-                temp_modified_mips_status['IF_Waiting'] = ""
-                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BEQ执行
-                temp_modified_mips_status['IF_Stall'] = False  # 下周期可以提取指令
-                if previous_mips_status['Registers'][rs_index] == previous_mips_status['Registers'][rt_index]:
-                    # rs == rt 才跳转
-                    temp_modified_mips_status['PC'] = target_address  # 修改 PC = target
-                    if mode == 'debug':
-                        print(
-                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
-                            str(temp_modified_mips_status[
-                                    'PC']))
-                else:  # 这里PC不用再+4，因为这条指令对应的+4在取这条指令执行fetch_ont_instruction的时候已经执行
-                    if mode == 'debug':
-                        print(
-                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，不符合条件跳转不执行，" + "PC为:" +
-                            str(temp_modified_mips_status[
-                                    'PC']))
-            else:
-                if mode == 'debug':
-                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
-
-        elif op in ['BLTZ', 'BGTZ']:
-            rs_index = int(instruction_waiting[4:].replace(" ", "").split(',')[0][1:])
-            offset = int(instruction_waiting[4:].replace(" ", "").split(',')[1][1:])
-            target_address = temp_modified_mips_status['PC'] + offset
-            if SCOREBOARD_STATUS['Regs_Result_Status'][rs_index] == '' and \
-                    judge_issue(instruction_waiting, None, previous_mips_status, mode):  # rs准备好
-                temp_modified_mips_status['IF_Waiting'] = ""
-                temp_modified_mips_status['IF_Executed'] = ' [' + instruction_waiting + ']'  # BGTZ/BLTZ执行
-                temp_modified_mips_status['IF_Stall'] = False  # 下周期可以提取指令
-                if op == "BLTZ" and previous_mips_status['Registers'][rs_index] < 0:  # BLTZ操作
-                    temp_modified_mips_status['PC'] = target_address  # 修改PC
-                    if mode == 'debug':
-                        print(
-                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
-                            str(temp_modified_mips_status[
-                                    'PC']))
-                elif op == "BGTZ" and previous_mips_status['Registers'][rs_index] > 0:  # BGTZ操作
-                    temp_modified_mips_status['PC'] = target_address  # 修改PC
-                    if mode == 'debug':
-                        print(
-                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，符合条件跳转执行，" + "PC更新为:" +
-                            str(temp_modified_mips_status[
-                                    'PC']))
-                else:  # 这里PC不用再+4，因为这条指令对应的+4在取这条指令执行fetch_ont_instruction的时候已经执行
-                    if mode == 'debug':
-                        print(
-                            'Fetch Unit:' + "指令【" + instruction_waiting + "】准备好，不符合条件跳转不执行，" + "PC为:" +
-                            str(temp_modified_mips_status[
-                                    'PC']))
-            else:
-                if mode == 'debug':
-                    print('Fetch Unit:' + " 等待中的指令【" + instruction_waiting + "】未准备好")
-
-    # 若Pre-issue没有空位，本周期不提取任何指令
-    elif len(previous_mips_status['Pre_Issue']) == 4:
-        if mode == 'debug':
-            print('Fetch Unit:' + "Pre-issue没有空位，本周期不提取任何指令")
-        # If there is no empty slot in the Pre-issue buffer at the end of the last cycle,
-        # no instruction can be fetched at the current cycle.
-        # 此时PC不变
-        pass
-
-    # 若本周期可以提取1条指令
-    elif len(previous_mips_status['Pre_Issue']) == 3:
-        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
-        #     return temp_modified_mips_status
-        instruction_fetched = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
-        if mode == 'debug':
-            print('Fetch Unit:' + "Pre-issue只有1个空位，本周期只能提取1条指令")
-        temp_modified_mips_status = fetch_one_instruction(instruction_fetched, previous_mips_status,
-                                                          temp_modified_mips_status, mode)
-        # 更新PC操作包含在 fetch_one_instruction（）函数中
-    # 若本周期可以提取2条指令
-    elif len(previous_mips_status['Pre_Issue']) <= 2:
-        # if previous_mips_status['PC'] > (START_ADDRESS + INSTRUCTION_COUNT * 4 - 4):  # PC越界（一般发生在最后一个BREAK周期）
-        #     return temp_modified_mips_status
-        instruction_fetched_1 = INSTRUCTION_SEQUENCE[previous_mips_status['PC']]
-        op1 = instruction_fetched_1.split()[0]
-        if op1 in ['J', 'JR', 'BEQ', 'BLTZ', 'BGTZ', 'BREAK']:  # 不再取instruction_fetched_2
-            if mode == 'debug':
-                print('Fetch Unit:' + "Pre-issue空位足够，但提取到的第1条是分支指令")
-            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
-                                                              temp_modified_mips_status, mode)
-        else:  # 再取第二条指令
-            if mode == 'debug':
-                print('Fetch Unit:' + "Pre-issue空位足够，本周期可以提取2条指令")
-            instruction_fetched_2 = INSTRUCTION_SEQUENCE[previous_mips_status['PC'] + 4]
-            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_1, previous_mips_status,
-                                                              temp_modified_mips_status, mode)
-            temp_modified_mips_status = fetch_one_instruction(instruction_fetched_2, previous_mips_status,
-                                                              temp_modified_mips_status, mode)
-            # 更新PC操作包含在 fetch_one_instruction（）函数中
     return temp_modified_mips_status
 
 
@@ -1138,10 +1107,10 @@ if __name__ == '__main__':
     p.close()
     # 默认sys.argv[1]为输入的文件名
     if len(sys.argv) == 1:
-        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample2.txt', 'disassembly.txt',
+        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample1.txt', 'disassembly.txt',
                                                                            START_ADDRESS)
-        MIPS_STATUS['Data'] = disassembler_memory('sample2.txt', 'disassembly.txt', INSTRUCTION_COUNT)
-        run_simulation(MIPS_STATUS)
+        MIPS_STATUS['Data'] = disassembler_memory('sample1.txt', 'disassembly.txt', INSTRUCTION_COUNT)
+        run_simulation(MIPS_STATUS, 'debug')
     elif len(sys.argv) == 2:
         INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt',
                                                                            START_ADDRESS)

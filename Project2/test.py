@@ -17,7 +17,7 @@ MIPS_STATUS = {
     "IF_Waiting": "",  # 使IF单元stall的分支指令
     "IF_Executed": "",
     # 下面是一些流水线buffer, 为保证冒号后不多空格，存储的指令格式为" [instruction]"
-    'Pre_Issue': [' [SW R5, 340(R16)]', ' [SLL R16, R1, #2]', ' [LW R3, 300(R16)]', ' [LW R4, 320(R16)]' ],  # 4 entry at most
+    'Pre_Issue': [' [LW R4, 360(R16)]', ' [LW R5, 380(R16)]', ' [MUL R5, R3, R4]'],  # 4 entry at most
     'Pre_ALU1': [],  # 2 entry at most
     'Pre_ALU2': [],  # 2 entry at most
     'Pre_MEM': "",  # 1 entry
@@ -41,10 +41,20 @@ def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写�
     read_regs_set = set('')
     write_regs_set = set('')
     op = instruction.split()[0]
-    if op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
+    if op == 'JR':   # J target
+        rs_index = int(instruction[4:])
+        read_regs_set.add(rs_index)
+    elif op =='BEQ':   # BEQ rs, rt, offset 【if rs = rt then branch】
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
+        read_regs_set.add(rs_index)
+        read_regs_set.add(rt_index)
+    elif op in ['BLTZ', 'BGTZ']:   # BLTZ rs, offset [if rs < 0 then branch]
+        rs_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
+        read_regs_set.add(rs_index)
+    elif op in ['SLL', 'SRL', 'SRA']:  # rd ← rt >> sa
         rd_index = int(instruction[4:].replace(" ", "").split(',')[0][1:])
         rt_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
-        sa = int(instruction[4:].replace(" ", "").split(',')[2][1:])
         read_regs_set.add(rt_index)
         write_regs_set.add(rd_index)
     elif op in ['ADD', 'SUB', 'MUL', 'AND', 'OR', 'XOR', 'NOR', 'SLT']:  # rd ← rs × rt
@@ -59,7 +69,7 @@ def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写�
         rs_index = int(instruction[4:].replace(" ", "").split(',')[1][1:])
         read_regs_set.add(rs_index)
         write_regs_set.add(rt_index)
-    elif op == 'SW':   # SW rt, offset(base) [memory[base+offset] ← rt]
+    elif op == 'SW':  # SW rt, offset(base) [memory[base+offset] ← rt]
         rt_index = int(instruction[3:].replace(" ", "").split(',')[0][1:])
         left_parenthesis_index = int(instruction[3:].replace(" ", "").index('('))
         base_index = int(instruction[3:].replace(" ", "")[left_parenthesis_index + 2:-1])
@@ -74,21 +84,26 @@ def extract_regs(instruction):  # 从指令中抽取要读的寄存器和要写�
     return read_regs_set, write_regs_set
 
 
-# 判断pre-issue中的某一条指令是否可以发射，只判断WAR，RAW，WAW相关，不判断其他条件（输入的指令格式为：" [instruction]"）
+# 判断pre-issue中的某一条指令是否可以发射，只判断是否存在WAR，RAW，WAW相关，不判断其他条件
 def judge_issue(current_instruction, current_index_in_list, previous_mips_status, mode=''):
     # instruction_index_in_list是当前指令在pre-issue单元中的序号
     global SCOREBOARD_STATUS
     all_early_read_regs_set = set('')  # 所有pre-issue中在该指令前的指令要读的寄存器
     all_early_write_regs_set = set('')  # 所有pre-issue中在该指令前的指令要写的寄存器
     current_read_regs_set, current_write_regs_set = extract_regs(current_instruction)
-    print('当前要发射的指令', current_instruction, "要读的寄存器为", current_read_regs_set, '要写的寄存器为', current_write_regs_set)
-    for i in range(current_index_in_list):
-        print('检查Pre-issue ' + str(i) + '中的指令' + previous_mips_status['Pre_Issue'][i][2:-1])
-        early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
-        early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
-        all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
-        all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
-        print('合并指令', early_instruction, "后所有要读的寄存器为", all_early_read_regs_set, '要写的寄存器为', all_early_write_regs_set)
+    op = current_instruction.split()[0]
+    if op in ['JR', 'BEQ', 'BLTZ', 'BGTZ']:  # 判断本周期提取到的一条需要访问寄存器的分支指令是否能执行
+        for ins in previous_mips_status['Pre_Issue']:
+            early_instruction = ins[2:-1]
+            early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
+            all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
+            all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
+    else:  # 判断pre-issue队列中的一条指令是否与活动指令有WAR，RAW，WAW相关
+        for i in range(current_index_in_list):
+            early_instruction = previous_mips_status['Pre_Issue'][i][2:-1]
+            early_read_regs_set, early_write_regs_set = extract_regs(early_instruction)
+            all_early_read_regs_set = all_early_read_regs_set.union(early_read_regs_set)
+            all_early_write_regs_set = all_early_write_regs_set.union(early_write_regs_set)
     # 检查该指令与Pre-issue单元中在它前面的指令之间的相关性
     # Pre-issue队列中在它前面的指令不和它写同一个寄存器
     for reg_index in current_write_regs_set:
@@ -105,18 +120,17 @@ def judge_issue(current_instruction, current_index_in_list, previous_mips_status
     # 检查该指令与已经发射（但未结束）的指令之间的相关性
     # 没有已经发射（但未结束）的指令与它写同一个寄存器
     for reg_index in current_write_regs_set:
-        if SCOREBOARD_STATUS['Regs_Result_Status'][int(reg_index)] != '':
+        if SCOREBOARD_STATUS['Regs_Result_Status'][reg_index] != '':
             return False
     # 没有已经发射（但未结束）的指令写它要读的寄存器
     for reg_index in current_read_regs_set:
-        if SCOREBOARD_STATUS['Regs_Result_Status'][int(reg_index)] != '':
+        if SCOREBOARD_STATUS['Regs_Result_Status'][reg_index] != '':
             return False
     # 没有已经发射（但未结束）的指令要读它要写的寄存器
     for reg_index in current_write_regs_set:
-        if SCOREBOARD_STATUS['Regs_Operand_Status'][int(reg_index)] != '':
+        if SCOREBOARD_STATUS['Regs_Operand_Status'][reg_index] != '':
             return False
     return True
 
-if __name__ == '__main__':
-    print(len(sys.argv))
-    print(sys.argv[0])
+
+print(judge_issue('BEQ R5, R0, #28', None, MIPS_STATUS, mode=''))
