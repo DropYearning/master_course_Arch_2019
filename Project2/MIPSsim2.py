@@ -1138,9 +1138,9 @@ if __name__ == '__main__':
     p.close()
     # 默认sys.argv[1]为输入的文件名
     if len(sys.argv) == 1:
-        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample2.txt', 'disassembly.txt',
+        INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction('sample1.txt', 'disassembly.txt',
                                                                            START_ADDRESS)
-        MIPS_STATUS['Data'] = disassembler_memory('sample2.txt', 'disassembly.txt', INSTRUCTION_COUNT)
+        MIPS_STATUS['Data'] = disassembler_memory('sample1.txt', 'disassembly.txt', INSTRUCTION_COUNT)
         run_simulation(MIPS_STATUS)
     elif len(sys.argv) == 2:
         INSTRUCTION_COUNT, INSTRUCTION_SEQUENCE = disassembler_instruction(sys.argv[1], 'disassembly.txt',
@@ -1152,6 +1152,3 @@ if __name__ == '__main__':
                                                                            START_ADDRESS)
         MIPS_STATUS['Data'] = disassembler_memory(sys.argv[1], 'disassembly.txt', INSTRUCTION_COUNT)
         run_simulation(MIPS_STATUS, sys.argv[2])
-
-
-
